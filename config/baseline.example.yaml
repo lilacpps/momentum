@@ -1,26 +1,40 @@
 strategy:
-  name: tsmom_baseline
+  name: tsmom_daily_unscaled
   timeframe: 1d
-  lookback_days: 240
-  signal: return_sign
-  exit: signal_reversal
-  stop_loss: null
-  take_profit: null
 
-portfolio:
-  mode: equal_notional   # later: equal_risk
+signal:
+  type: return_sign
+  lookback:
+    value: 240
+    unit: bars
+  price_field: close
+  information_lag_bars: 1
+
+execution:
+  frequency: every_bar
+  price_field: open
+  execute_on_next_bar: true
+
+position:
+  long_value: 1.0
+  short_value: -1.0
+  flat_value: 0.0
+  zero_signal: flat
+  unchanged_signal: hold
+  reversal: close_and_reverse
 
 risk:
   volatility_normalization: false
 
 costs:
+  enabled: false
   spread: false
   commission: false
   slippage: false
   swap: false
   swap_not_modeled: true
 
-validation:
-  common_parameter_across_symbols: true
-  forbid_symbol_specific_tuning: true
-  final_holdout_locked: true
+metadata:
+  baseline_type: simplified_daily_tsmom
+  academic_mop_replication: false
+  signal_return_type: price_return
