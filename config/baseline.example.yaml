@@ -1,0 +1,26 @@
+strategy:
+  name: tsmom_baseline
+  timeframe: 1d
+  lookback_days: 240
+  signal: return_sign
+  exit: signal_reversal
+  stop_loss: null
+  take_profit: null
+
+portfolio:
+  mode: equal_notional   # later: equal_risk
+
+risk:
+  volatility_normalization: false
+
+costs:
+  spread: false
+  commission: false
+  slippage: false
+  swap: false
+  swap_not_modeled: true
+
+validation:
+  common_parameter_across_symbols: true
+  forbid_symbol_specific_tuning: true
+  final_holdout_locked: true
