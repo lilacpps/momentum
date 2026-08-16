@@ -81,7 +81,10 @@ M1はM3 multi-symbol backtest engineを要求しません。
 
 ---
 
-## M2 — Academic-Style Monthly Comparator
+## M2 — Practical Monthly Comparator
+
+M1A Practical Predictability完了後に開始可能。M1B/M1Cのreference workstreamは並行して進め、
+未完でもM2をblockしない。
 
 ### 初期仕様
 

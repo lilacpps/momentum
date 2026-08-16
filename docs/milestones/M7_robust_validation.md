@@ -16,7 +16,8 @@ and TSH exact reference convention is frozen before M3; neither is deferred to M
 - `docs/07_academic_validation_spec.md`
 
 ## 前提
-Track BについてM1開始前に、development / validation / final holdout / symbol universeがfreeze済み。
+Track BについてM1開始前に、development / validation / final holdout / symbol universe /
+data source / timezone / daily boundaryがfreeze済み。
 Track A published sampleはreplication sampleとして分離。
 
 ## 実装対象
@@ -66,12 +67,18 @@ final holdoutを開いた後に、
 MOP published sample等はknown replication sampleとして報告する。
 post-publication Academic OOSがある場合は別ラベルで一度だけ評価する。
 
-## 実装前に固定すべき事項
-- exact split dates
+## M7開始時に既にfreeze済みであるべき事項
+- exact Track B split dates
+- Track B data source
+- Track B timezone
+- Track B daily boundary
+- symbol universe
+- TSH exact historical-mean convention
+
+## M7開始前に新たに固定する事項
 - walk-forward window definitions
 - parameter grid
 - benchmark set
-- TSH exact historical-mean convention
 - plateau judgment rule
 - minimum sample criteria
 - final report metrics

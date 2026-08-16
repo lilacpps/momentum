@@ -1,7 +1,8 @@
-# M2 — Academic-Style Monthly Comparator
+# M2 — Practical Monthly Comparator
 
 ## Status
-Specification-ready after M1.
+Ready after M1A Practical Predictability. M1B MOP Regression Comparator and M1C Huang
+Reference Challenge may remain pending without blocking this Practical Track milestone.
 
 ## 目的
 M0のdaily refresh / reversal仕様と、academic literatureに近いmonthly formation / holding仕様との差を分離する。

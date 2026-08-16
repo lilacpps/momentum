@@ -42,7 +42,8 @@ M0がnegativeでもcorrectなら完了。
 M0 implementation
 -> golden fixture / synthetic data / unit tests
 -> engine correctness確定
--> Track B development / validation / final holdout / symbol universe freeze
+-> Track B development / validation / final holdout / symbol universe /
+   data source / timezone / daily boundary freeze
 -> 実historical dataで初めてgross performanceを生成
 -> M1
 ```
@@ -52,10 +53,13 @@ schema、timestamp、ordering、missingness等のstructural validationは可能�
 predictive metricは不可とします。
 
 ```text
-development
-validation
-final holdout
+development period
+validation period
+final holdout period
 symbol universe
+data source
+timezone
+daily boundary
 ```
 
 を固定します。
@@ -68,9 +72,12 @@ M1はworkstream別にstatusを持つ。
 
 - M1A Practical Predictability: `Ready after Track B split / universe freeze`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
-- M1C Huang Statistical Challenge: `Ready after Huang methodology contract freeze`
+- M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`
+- M1C-Huang-practical-analogue: `Ready after Huang methodology contract freeze and Track B data`
 
-M1Bのunderlyingが無い場合もM1AとAQR factor sanity checkは継続し、M1Bだけを data unavailable / pending とする。
+M1Bのunderlyingが無い場合もM1AとAQR factor sanity checkは継続し、M1Bだけを data unavailable /
+pending とする。M1C-Huang-referenceもeligible reference underlyingがなければpendingとし、
+M1C-Huang-practical-analogueはTrack B dataで独立して進める。ただしpractical analogueをHuang replicationとは呼ばない。
 
 ### Practical primary
 
@@ -96,7 +103,9 @@ MOP methodologyに合わせ、volatility-standardized monthly returnのpooled re
 
 naive IID / conventional pooled t-valueだけをprimary evidenceにしません。
 
-## M2 — Academic-Style Monthly Comparator
+## M2 — Practical Monthly Comparator
+
+M1Aの完了後に開始可能。M1B/M1Cが未完でもPractical Trackを停止しない。
 
 monthly decision / 12 calendar-month formation / 1-month holdingを実装し、M0 daily ruleとの差を比較します。
 

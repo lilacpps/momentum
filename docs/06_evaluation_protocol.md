@@ -194,7 +194,8 @@ current swapの過去一律適用は原則避けます。
 ## Gate M1
 - M1A Practical: Track B split/universe freeze後
 - M1B MOP comparator: eligible reference underlying data identified
-- M1C bootstrap challenge: Huang contract freeze後
+- M1C-Huang-reference: Huang contract freeze + eligible reference underlying data
+- M1C-Huang-practical-analogue: Huang contract freeze + Track B data
 - Academic / Practical tracks separated
 - uncertainty
 

@@ -138,10 +138,11 @@ Huang bootstrapはchallenge module開始前にpaperからcontractをfreezeし、
 
 - M1A Practical Predictability: `Ready after Track B split / universe freeze`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
-- M1C Huang Statistical Challenge: `Ready after Huang methodology contract freeze`
+- M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`
+- M1C-Huang-practical-analogue: `Ready after Huang methodology contract freeze and Track B data`
 
-AQR factor-only workbookはM1Bのunderlyingとはみなしません。M1Bがdata unavailable / pendingでも、
-M1AとAQR factor sanity checkは継続します。
+AQR factor-only workbookはM1B/M1C-Huang-referenceのunderlyingとはみなしません。reference underlyingが
+unavailableでも、M1A、M1C-Huang-practical-analogue、AQR factor sanity checkは継続します。
 
 ---
 
@@ -168,7 +169,7 @@ Milestone文書はscopeを狭めてよいですが、上記normative specを上�
 ```text
 M0  Engine Correctness — Single-Symbol Daily Baseline
 M1  Academic Hypothesis + Reference Statistical Validation
-M2  Academic-Style Monthly Comparator
+M2  Practical Monthly Comparator
 M3  Multi-Symbol Common Rule
 M4  Portfolio Aggregation
 M5  Volatility Normalization + MOP Strategy Comparator

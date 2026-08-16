@@ -42,11 +42,14 @@ M1は一つのReady gateではなく、次のworkstreamごとに判定します�
 |---|---|---|
 | M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Ready after Track B split / universe freeze |
 | M1B MOP Regression Comparator | eligible futures / forward / excess-return underlying series | Ready only after eligible reference underlying data is identified |
-| M1C Huang Statistical Challenge | exact bootstrap contractをfreeze後に実装 | Ready after Huang methodology contract freeze |
+| M1C-Huang-reference | Huang methodology contract + eligible MOP-like reference underlying series | Ready after methodology freeze and eligible reference underlying data |
+| M1C-Huang-practical-analogue | same frozen methodology on Track B data | Ready after methodology freeze and Track B data |
 
 AQR workbookがfactor returnだけの場合、それだけでlag-by-lag instrument regression用のunderlying
 seriesがあるとはみなしません。underlyingが確保できない場合もM1AとAQR factor sanity checkは進め、
-M1Bだけを `data unavailable / pending` と報告します。
+M1Bだけを `data unavailable / pending` と報告します。M1C-Huang-referenceもeligible reference
+underlyingがない場合は `data unavailable / pending` とし、M1C-Huang-practical-analogueはTrack B
+dataで独立して進めます。後者をHuang replicationとは呼びません。
 
 ---
 
@@ -256,19 +259,21 @@ report:
 
 **Paper-explicit**
 
-- null: pooled regressionのtime-series momentum slope `beta = 0`
+- null: pooled regressionのtime-series momentum slope `beta = 0` [Huang §4, Eq. (3), PDF p.13]
 - regression: volatility-standardized next return on lagged volatility-standardized return,
-  with an intercept; the focused case is past 12-month -> next 1-month
-- residual: full-sample fitted regression residual
+  with an intercept; the focused case is past 12-month -> next 1-month [Huang §4, Eq. (3), PDF p.13]
+- residual: full-sample fitted regression residual [Huang §4, Eq. (8), PDF p.14]
 - parametric wild bootstrap: fitted model plus residual multiplied by an independent
   Rademacher draw `v in {-1,+1}`, each probability 1/2; the predictor is held fixed
+  [Huang §4, Eqs. (8)–(10), PDF p.14]
 - nonparametric pairs bootstrap: observed `(standardized dependent, standardized predictor)`
-  pairsを、同時に、replacementありでT pairs resample
-- both methods preserve the observed cross-sectional rows; the paper does not introduce a
-  time-series block or cross-sectional cluster resample in these two contracts
+  pairsを、同時に、replacementありでT pairs resample [Huang §4, Eq. (11), PDF p.14]
 - test statistic: pooled regression slope t-statistic
-- one-sided research question: positive TSM (`beta > 0`); reported two-sided diagnosticsは補助表
-- 1,000 simulated samples / method
+- 1,000 simulated samples / method [Huang §4, PDF p.14]
+
+MOP EWMA anchor: [MOP §2.4, journal PDF pp.233–234, volatility equation and lag statement]
+です。原典PDF版によってequation numberingが異なるため、MOPについてはsectionと印刷ページを
+primary anchorとし、数式自体をこの文書へ転記します。
 
 **Implementation convention (paper text aloneで一意でない事項)**
 
@@ -276,10 +281,12 @@ report:
 - empirical one-sided p-valueは `mean(t* >= t_obs)`、two-sidedは
   `mean(abs(t*) >= abs(t_obs))` とし、critical valueはbootstrap statisticの対応する
   95th/99th percentileとする。
+- primary research questionはpositive TSM (`beta > 0`) のone-sided testとし、two-sided
+  diagnosticsは補助表とする。
 - missing rowはそのregressionのcomplete-caseとして除外し、各bootstrap replicateで再度
   欠損を補間しない。sample size Tはfreeze後のcomplete-case数とする。
-- cross-sectional / time dependenceの追加cluster/block処理はHuang primary bootstrapへ
-  勝手に追加しない。感度分析として出す場合は別method名にする。
+- primary Huang bootstrapではtime-series blockやcross-sectional cluster resampleを追加しない。
+  追加する場合は別method名の感度分析とする。
 
 このcontractを文書化してfreezeした後にだけ実装を開始し、fixtureでnull、residual、Rademacher、
 pairs resampling、statistic、p-valueを検証します。
@@ -340,7 +347,7 @@ data-definition差、instrument universe差、roll / excess-return差を先に�
 
 ---
 
-# 7. M2 — Academic-Style Monthly Comparator
+# 7. M2 — Practical Monthly Comparator
 
 ## 7.1 Formation date
 

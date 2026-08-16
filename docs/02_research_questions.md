@@ -25,7 +25,7 @@ M1を少なくとも次の3 workstreamに分ける。
 
 - M1A Practical Predictability: Track B split / universe freeze後に実行
 - M1B MOP Regression Comparator: eligible reference underlying data確認後に実行
-- M1C Huang Statistical Challenge: methodology contract freeze後に実行
+- M1C-Huang-reference / M1C-Huang-practical-analogue: methodology contract freeze後、各data gateに応じて実行
 
 ### Academic Track
 

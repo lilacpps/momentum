@@ -1,7 +1,7 @@
 # M1 — Academic Hypothesis + Reference Statistical Validation
 
 ## Status
-Workstream別。M1Aは `Ready after Track B split / universe freeze`、M1Bは `Ready only after eligible reference underlying data is identified`、M1Cは `Ready after Huang methodology contract freeze`。
+Workstream別。M1Aは `Ready after Track B split / universe freeze`、M1Bは `Ready only after eligible reference underlying data is identified`、M1C-Huang-referenceは `Ready after Huang methodology contract freeze and eligible reference underlying data`、M1C-Huang-practical-analogueは `Ready after Huang methodology contract freeze and Track B data`。
 
 ## 目的
 strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのregression evidenceとHuang et al.の反証を同じresearch stageで確認する。
@@ -16,10 +16,12 @@ strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのre
 
 ## 前提
 M0完了済み。
-Track BについてM1結果を見る前にdevelopment / validation / final holdout / symbol universeをfreeze済み。
+Track BについてM1結果を見る前にdevelopment / validation / final holdout / symbol universe /
+data source / timezone / daily boundaryをfreeze済み。
 Track A published sampleはreplication sampleとして別管理。
 M1AはAcademic underlying dataなしでも実行可能。AQR factor-only workbookはM1Bのunderlyingとはみなさない。
-M1B data unavailable / pendingでもM1AとAQR sanity checkは停止しない。
+M1B data unavailable / pendingでもM1AとAQR sanity checkは停止しない。M1C-Huang-referenceも
+reference underlyingがなければpendingとし、M1C-Huang-practical-analogueはTrack B dataで独立して進める。
 
 ## Workstream A — M1A Practical Predictability
 
@@ -50,6 +52,9 @@ Primary:
 - focused 12m cumulative -> next1m comparatorも別表
 
 ## Workstream C — M1C Huang Challenge
+
+`M1C-Huang-reference` はeligible reference underlying dataが必要。
+`M1C-Huang-practical-analogue` はTrack B dataで実行できるが、Huang replicationとは呼ばない。
 
 - asset-by-asset regression
 - pooled regression
