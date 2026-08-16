@@ -16,20 +16,11 @@ single-symbol Daily OHLCを基本とします。
 
 ## Timestamp
 
-data sourceごとに、
-
-- timestampがbar openかcloseか
-- timezone
-- daily session boundary
-- source
-- price type
-
-をmetadataへ記録します。
+data sourceごとに、timestampがbar openかcloseか / timezone / daily session boundary / source / price type をmetadataへ記録します。
 
 ## Ordering
 
 timestamp ascendingを必須とします。
-
 unsorted inputを自動sortする場合も、元dataがunsortedだったことを検出可能にします。
 
 ## Duplicate
@@ -39,15 +30,12 @@ duplicate timestampは黙って処理せず、M0では原則error。
 ## Missing values
 
 OHLCをforward-fillしてsignalやexecutionを成立させません。
-
 特にcloseのforward-fillは禁止。
-
 欠損barを除外する場合、その処理をpreprocessing metadataへ残します。
 
 ## Lookback semantics
 
 `lookback_intervals=N` はN本のreturn intervalを意味します。
-
 必要Close observationsは `N+1`。
 
 例えば240なら、
@@ -60,9 +48,7 @@ Close[t-1] / Close[t-241] - 1
 
 ## Daily boundary
 
-FX/CFDではbroker/server timezoneによりDaily barが異なるため、
-同一experiment内ではboundaryを固定します。
-
+FX/CFDではbroker/server timezoneによりDaily barが異なるため、同一experiment内ではboundaryを固定します。
 複数sourceを無条件に混ぜません。
 
 ## Price type
@@ -75,8 +61,7 @@ bid / ask / mid / broker_chart
 
 のどれかを記録します。
 
-M0のbroker-chart OHLCはgross research priceであり、
-Net execution priceとはみなしません。
+M0のbroker-chart OHLCはgross research priceであり、Net execution priceとはみなしません。
 
 ---
 
@@ -85,8 +70,7 @@ Net execution priceとはみなしません。
 daily dataからmonth-end seriesを作る場合、
 
 ```text
-month_end_price[M]
-  = calendar month M の最後のvalid daily Close
+month_end_price[M] = calendar month M の最後のvalid daily Close
 ```
 
 とします。
@@ -94,39 +78,47 @@ month_end_price[M]
 M1 Practical Track:
 
 ```text
-past_12m_return[M]
-  = month_end_price[M] / month_end_price[M-12] - 1
-
-next_1m_return[M]
-  = month_end_price[M+1] / month_end_price[M] - 1
+past_12m_return[M] = month_end_price[M] / month_end_price[M-12] - 1
+next_1m_return[M]  = month_end_price[M+1] / month_end_price[M] - 1
 ```
 
-これは統計的predictability用であり、
-tradable next-open PnLとは別です。
+これは統計的predictability用であり、tradable next-open PnLとは別です。
 
 M2のexecutionは `docs/07_academic_validation_spec.md` に従います。
 
 ---
 
-# 3. Price ReturnとAcademic Excess Return
+# 3. Academic / Reference Data Contract
 
-spot/CFD price returnは、
-futures / forward excess returnと同一ではありません。
+Track Aのpublished-sample replicationでは、spot/CFD OHLC contractを無理に流用しません。
 
-差には、
+reference datasetごとに、
 
-- currency carry
-- futures roll yield
-- financing
-- broker swap
+- excess return / price return
+- monthly / daily
+- unit（decimal / percent）
+- sample period
+- instrument count
+- missing-value convention
+- volatility normalization済みか
 
-が含まれ得ます。
+をmetadataへ記録します。
+
+AQR Original Paper Dataがfactor returnのみを含む場合、それをraw instrument seriesとして扱いません。
+
+---
+
+# 4. Price ReturnとAcademic Excess Return
+
+spot/CFD price returnは、futures / forward excess returnと同一ではありません。
+
+差には、currency carry / futures roll yield / financing / broker swap が含まれ得ます。
 
 Track A / Track Bを分離して報告します。
 
 ---
 
-# 4. Transaction Cost Policy
+# 5. Transaction Cost Policy
 
 目的を2つに分けます。
 
@@ -155,8 +147,6 @@ Gross
 - slippage
 ```
 
-swap / financingなし。
-
 ### Level 3 — Full broker net
 
 ```text
@@ -171,9 +161,7 @@ historical条件が十分に再現可能な場合だけこの名称を使いま�
 
 ---
 
-# 5. M6 Cost Unit Contract
-
-normalized positionの絶対変化をturnoverとします。
+# 6. M6 Cost Unit Contract
 
 ```text
 turnover[t] = abs(position[t] - position[t-1])
@@ -187,74 +175,27 @@ Long -> Flat   = 1
 Long -> Short  = 2
 ```
 
-cost parameterは原則、
-
-> **one-way basis points per unit normalized notional turnover**
-
-へ正規化します。
+cost parameterは原則、**one-way basis points per unit normalized notional turnover** へ正規化します。
 
 ```text
-cost_return[t]
-  = turnover[t] * all_in_one_way_cost_bps / 10000
+cost_return[t] = turnover[t] * all_in_one_way_cost_bps / 10000
 ```
 
 round-trip quoteしかない場合はone-wayへ変換してmetadataへ残します。
 
-break-even costも同じ単位で報告します。
-
 ---
 
-# 6. Commission
+# 7. Commission / Spread / Slippage
 
-historical scheduleがなくても、
+historical scheduleがなくてもscenario分析できます。
 
-- per lot
-- per notional
-- bps
-
-をone-way bpsへ変換可能ならscenario分析できます。
-
-例:
-
-```text
-0
-low
-base
-high
-```
-
-一点推定を真値扱いしません。
-
----
-
-# 7. Spread / Slippage
-
-bid/askやtick execution履歴がない場合:
-
-```text
-0
-low
-base
-1.5x base
-2.0x base
-```
-
-などでcost robustnessを確認します。
-
-historical execution replicationとは呼びません。
+spread / slippage履歴がない場合は、0 / low / base / 1.5x / 2.0x等でrobustnessを確認し、historical execution replicationとは呼びません。
 
 ---
 
 # 8. Break-even Cost
 
-M6で必須診断とします。
-
-> gross edgeがゼロになるall-in one-way cost level
-
-を求めます。
-
-実コストの一点推定より、
-edgeにどの程度cost余裕があるかを重視します。
+M6で必須診断とし、gross edgeがゼロになるall-in one-way cost levelを求めます。
 
 ---
 
@@ -268,8 +209,9 @@ historical swapがない場合:
 4. historical subsetがあれば別評価
 5. future forward testでactual swapを記録
 
-Daily/long-horizon FX/CFDではcommissionより重要になる可能性があるため、
-欠落を明示します。
+Daily/long-horizon FX/CFDでは重要になる可能性があるため、欠落を明示します。
+
+**swap情報がない現段階ではM0〜M5をGross price-onlyで進めてよい**ものとします。
 
 ---
 

@@ -1,19 +1,16 @@
 # Development Roadmap
 
 全工程を `M0...M9` に統一します。
-
-研究checkpointもproject progression上のMilestoneとして扱います。
+research checkpointもproject progression上のMilestoneとして扱います。
 
 ---
 
 ## M0 — Single-Symbol Unscaled Daily TSMOM / Engine Correctness
 
 ### 目的
-
 causal daily engineを正しく実装する。
 
 ### 成果
-
 - Daily OHLC contract
 - 240-return-interval signal
 - next-open execution
@@ -24,66 +21,58 @@ causal daily engineを正しく実装する。
 - golden/unit tests
 
 ### 非対象
-
-- profitabilityを合否条件にすること
-- multi-symbol
-- portfolio
-- vol scaling
-- costs
-- optimization
-
-### 完了条件
-
-- 241 Close requirementを含むoff-by-one test
-- hand-calculated signal一致
-- execution一致
-- PnL一致
-- lookahead mutation通過
-- warm-up正しい
-- unchanged signalで余計なtradeなし
-- zero signal Flat
-- terminal open positionをsynthetic liquidationしない
-- invalid input処理
-- deterministic
+profitability gating / multi-symbol / portfolio / vol scaling / costs / optimization。
 
 ### Gate
-
-M0完了直後、M1開始前にhistorical splitとsymbol universeをfreezeする。
+M0完了直後、Track BのM1結果を見る前にhistorical splitとsymbol universeをfreezeする。
+Track Aのpublished replication sampleは別管理。
 
 ---
 
-## M1 — Academic Hypothesis Check
+## M1 — Academic Hypothesis + Reference Statistical Validation
 
 ### 目的
-
-strategy engineとは別に、
-
-```text
-past 12-month return -> next 1-month return
-```
-
-のpredictabilityを直接確認。
+strategy engineとは別にpredictabilityを直接確認し、MOPのregression methodologyとHuang et al.の反証も検証する。
 
 ### Track A
 
-academic / excess-return / reference data。
+- MOP published/reference sample
+- excess-return dataが使える場合は優先
+- AQR factor data sanity check
+- MOP regression comparator
+- Huang challenge
 
 ### Track B
 
-spot/CFD price-return analogue。
+- spot/CFD monthly price-return analogue
+- past 12m -> next 1m
+
+### MOP comparator
+
+- monthly standardized returns
+- pooled regression
+- lags `h=1...60`
+- calendar-month clustering
+
+### Huang challenge
+
+- asset-by-asset
+- pooled
+- fixed-effect sensitivity
+- wild bootstrap
+- pairs bootstrap
 
 ### 成果
 
 - sign-conditioned future returns
 - continuous predictor
 - effect size / CI
-- symbol別
-- pooled
-- robust uncertainty
+- symbol別 / pooled
+- MOP regression comparison
+- bootstrap inference report
 - sample diagnostics
 
-M1はM3のmulti-symbol backtest engineを要求しない。
-別の軽量research moduleで複数seriesを読んでよい。
+M1はM3 multi-symbol backtest engineを要求しません。
 
 ---
 
@@ -107,8 +96,7 @@ M1はM3のmulti-symbol backtest engineを要求しない。
 - return / DD
 - signal agreement
 
-M2のためにM0を万能schedulerへ過剰一般化しない。
-signal/target generationとexecution/accountingの境界を再利用する。
+M2はMOP representative factorの完全再現ではありません。
 
 ---
 
@@ -119,8 +107,7 @@ M0と同じdaily ruleを複数symbolへ独立適用。
 - symbol別metrics
 - common parameter
 - symbol-specific tuningなし
-
-可能ならM2 comparatorも同じuniverseで出す。
+- TSH comparatorに必要なsymbol-level monthly historyを供給可能にする
 
 ---
 
@@ -131,36 +118,50 @@ M0と同じdaily ruleを複数symbolへ独立適用。
 原則:
 
 - experiment universeを事前固定
-- common valid start以降で比較
+- practical主要比較はcommon valid start
 - ex-post symbol selectionなし
+- MOP available-universe aggregationとは別mode
 
 成果:
 
 - portfolio equity
-- return
-- DD
-- Sharpe
-- exposure
-- contribution
+- return / DD / Sharpe
+- exposure / contribution
+- TSM vs TSH portfolio comparator plumbing
 
 ---
 
-## M5 — Volatility Normalization
+## M5 — Volatility Normalization + MOP Strategy Comparator
 
-directional signalを変えずsizingのみ変更。
+### Comparison modes
 
-比較:
+1. unscaled / equal-notional
+2. practical equal-risk / volatility-scaled
+3. MOP-compatible reference-scaled
 
-- equal-notional
-- equal-risk / volatility-scaled
+### MOP-compatible fixed reference contract
 
-vol estimator / target riskはM5開始前に仕様化する。
+- EWMA lagged daily variance
+- annualization = 261
+- center-of-mass = 60 days
+- `sigma[t-1]` information lag
+- per-instrument target annualized volatility = 40%
+- `position magnitude = 0.40 / sigma[t-1]`
+- available instrumentsをequal weight
+- 12-month sign / 1-month holding comparatorと接続
+
+Practical cap / floor / target riskはMOP reference modeとは別experiment。
+
+### 成果
+
+- unscaled vs scaled
+- practical vs MOP-compatible
+- contribution diagnostics
+- AQR published factorとのseries-level sanity comparison（可能な範囲）
 
 ---
 
 ## M6 — Cost and Financing Layer
-
-成果:
 
 - spread
 - commission
@@ -176,7 +177,7 @@ historical swap不足時はFull broker netを作らない。
 
 ---
 
-## M7 — Robust Historical Validation
+## M7 — Robust Historical Validation + Challenge Benchmarks
 
 成果:
 
@@ -188,16 +189,18 @@ historical swap不足時はFull broker netを作らない。
 - walk-forward
 - cost stress
 - benchmark
-- final holdout one-shot evaluation
+- TSM vs TSH
+- long / short leg attribution
+- weighting-scheme sensitivity
+- Track B final holdout one-shot evaluation
 
-ここまででTrack A / Track Bを分けて報告可能にする。
+Track A published replication sampleとTrack B final holdoutを分離して報告する。
 
 ---
 
 ## M8 — 4h Momentum
 
 Dailyと同じ研究protocolを短期化。
-
 M6 cost framework完了後に開始。
 
 ---

@@ -21,30 +21,20 @@ M0ではdirectional componentだけを分離するため、次のprice-return si
 past_return_L(t) = Close[t-1] / Close[t-1-L] - 1
 ```
 
-ここで、
-
 - `t` = positionを更新する対象daily bar
 - `t-1` = signal計算時に利用可能な直近確定bar
-- `L` = calendar daysではなく **return interval数**
+- `L` = calendar daysではなくreturn interval数
 - M0標準 = `L = 240`
-
-です。
 
 ### Off-by-one契約
 
 `L = 240` は240個のprice-return intervalを意味します。
 
-したがって、
-
 ```text
 Close[t-1] / Close[t-241] - 1
 ```
 
-を計算し、signal生成には **241個のClose observation** が必要です。
-
-rolling windowを240 observationsとして1本短く実装してはなりません。
-
-signal mapping:
+を計算し、signal生成には241個のClose observationが必要です。
 
 ```text
 past_return > 0 -> Long
@@ -53,7 +43,6 @@ past_return = 0 -> Flat
 ```
 
 history不足時は `signal = undefined` とし、target positionはFlatにします。
-history不足を `signal = 0` と混同しません。
 
 ## 3. Cross-Sectional Momentumとの違い
 
@@ -79,18 +68,29 @@ loserをShort
 Moskowitz, Ooi, Pedersen (2012) は株価指数、通貨、商品、債券の
 futures / forwardsを横断してTime-Series Momentumを研究しています。
 
-本プロジェクトのM0は、その代表strategyの完全再現ではありません。
+MOPの代表的TSMOM factorは概ね、
 
-| 項目 | Academic literatureの代表的構成 | M0 |
+- monthly decision
+- past 12-month return sign
+- 1-month holding
+- ex-ante volatility scaling
+- per-instrument 40% annualized target volatility
+- available instrumentsのequal-weight aggregation
+
+を含みます。
+
+M0は、その完全再現ではありません。
+
+| 項目 | MOP代表的構成 | M0 |
 |---|---|---|
 | signal source | futures / forward excess return | spot / CFD price return |
-| formation | 約12か月 | 240 observed daily return intervals |
-| decision cadence | monthlyが代表 | daily |
-| holding | 1 month等 | target変更まで |
-| sizing | volatility scalingあり | unscaled ±1 |
-| portfolio | multi-market | single symbol |
-| carry / financing | return definitionに関係 | 未考慮 |
-| cost | strategy評価で別途考慮 | M0では未考慮 |
+| formation | 12 months | 240 observed daily intervals |
+| decision cadence | monthly | daily |
+| holding | 1 month | target変更まで |
+| sizing | ex-ante volatility scaling | unscaled ±1 |
+| portfolio | multi-market equal aggregation | single symbol |
+| carry / financing | excess-return definitionに関係 | 未考慮 |
+| cost | strategy評価で別途 | M0では未考慮 |
 
 したがってM0を、
 
@@ -120,56 +120,85 @@ M0の第一目的は利益の証明ではありません。
 
 M0がnegative returnでも、engineが仕様通りならM0は完了できます。
 
-## 6. M1/M2でacademicな問いへ近づける
+## 6. Reference validationへの段階
 
 ```text
 M0: engine correctness
 
-M1: past 12-month return
-        ->
-    next 1-month return
-    のpredictability
+M1: predictive relationを直接検証
+    + MOP regression comparator
+    + Huang statistical challenge
 
-M2: monthly decision
-    12 calendar-month formation
-    1-month holding
-    のacademic-style comparator
+M2: monthly / 12m formation / 1m holding
+    のunscaled strategy comparator
 
-M3+: multi-symbol / portfolio / risk / costs
+M3/M4: multi-symbol / portfolio
+
+M5: MOP-compatible volatility scaling
+    + 40% per-instrument reference sizing
+    + available-instrument equal aggregation
+
+M6: cost / financing
+
+M7: robustness / TSM-vs-TSH / practical final holdout
 ```
 
-M1/M2でもspot/CFD price dataを使う場合は、
-futures / forward excess-return strategyの完全再現とは呼びません。
+**M2だけではMOP代表TSMOM factorのstrategy-level reproductionには不足**します。
+M5でvolatility scalingまで入って初めてreference strategy comparatorが成立します。
 
-## 7. なぜ単一symbolだけで判断しないか
+## 7. MOP肯定結果だけで判断しない
+
+`references/7.Time-series momentum_ Is it there_.pdf` の批判をchallenge suiteへ入れます。
+
+最低限、
+
+- asset-by-asset predictability
+- pooled regression inference
+- wild / pairs bootstrap
+- TSM vs TSH
+- long / short leg attribution
+
+を確認します。
+
+strategyが利益を出しても、predictabilityが原因とは限らない点を明示します。
+
+## 8. 単一symbolだけで判断しない
 
 TSMOMは単一市場で常に強いedgeが出ることを前提にしません。
-
-そのため、
 
 - M0の単一symbolが負
 - ある1 symbolだけが非常に強い
 
 のどちらもTSMOM全体の結論にはしません。
 
-M3/M4で共通ruleとportfolioを評価します。
+M3/M4でcommon ruleとportfolioを評価します。
 
-## 8. Volatility scaling
+## 9. Volatility scaling
 
 volatility scalingはacademic TSMOMで重要ですが、
 signal predictabilityとrisk engineeringを混同しないためM0には入れません。
 
 M5で、
 
-- unscaled
-- volatility-scaled
+- unscaled / equal-notional
+- practical volatility-scaled
+- MOP-compatible reference-scaled
 
-を比較します。
+を分離して比較します。
 
-vol scalingでSharpeが上がっても、
-それをsignal predictabilityが強くなったとは表現しません。
+MOP-compatible comparatorでは、
 
-## 9. 最初に追加しないもの
+- lagged daily returnsによるEWMA ex-ante vol
+- annualization 261
+- center-of-mass 60 days
+- `sigma[t-1]` を使用
+- asset target annualized vol 40%
+
+をreference contractとします。
+
+vol scalingでSharpeが上がっても、それをsignal predictabilityが強くなったとは表現しません。
+
+## 10. 最初に追加しないもの
 
 M0では以下を追加しません。
 
@@ -183,16 +212,18 @@ M0では以下を追加しません。
 - symbol別lookback最適化
 - performanceを見ながら追加する閾値
 
-## 10. 成功条件の考え方
+## 11. 成功条件の考え方
 
 最終的な良い兆候は、
 
+- MOP方法論・reference seriesとの整合性を説明できる
+- Huang challengeで弱点も可視化される
 - 粗いparameter範囲で結果が壊れない
 - 複数市場で同方向の証拠がある
 - portfolioで分散効果がある
 - realistic cost scenarioでも完全には消えない
 - year / regimeで極端に一点依存しない
-- final holdoutで大崩れしない
+- Practical Trackのfinal holdoutで大崩れしない
 
 ことです。
 

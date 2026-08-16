@@ -56,6 +56,8 @@ M0の合否はprofitabilityではなく **engine correctness** で判定する�
 - parameter optimization
 - walk-forward
 - profitability gating
+- MOP regression reproduction
+- Huang bootstrap analysis
 
 ## 成果物
 - reusable single-symbol engine
@@ -93,12 +95,15 @@ M0の合否はprofitabilityではなく **engine correctness** で判定する�
 - terminal handling follows documented policy
 
 ## 次工程へ進む前の必須作業
-M1開始前に以下をfreezeする。
+Track BについてM1 historical resultを見る前に以下をfreezeする。
+
 - development period
 - validation period
 - final holdout period
 - symbol universe
 - data source / timezone / daily boundary
+
+Track Aのpublished replication sampleは上記holdoutと分離する。
 
 ## 人間が決める未決事項
 M0についてはなし。実装開始可能。

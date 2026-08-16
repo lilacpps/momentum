@@ -5,9 +5,7 @@
 M1で、strategy PnLではなく予測問題として直接確認する。
 
 ```text
-past 12-month return
-      ->
-next 1-month return
+past 12-month return -> next 1-month return
 ```
 
 見るもの:
@@ -27,7 +25,8 @@ M1を2 trackに分ける。
 
 ### Academic Track
 
-可能ならfutures / forward / excess-returnまたはAQR referenceを使う。
+futures / forward / excess-returnまたはreference seriesを使う。
+既知のpublished sampleはreplication sampleとして扱い、final holdoutとは呼ばない。
 
 ### Practical Track
 
@@ -63,21 +62,11 @@ M2で比較する。
 
 ## RQ3: Edgeは単一symbol依存か
 
-M3/M4で、
-
-- symbol別
-- common rule
-- portfolio
-
-を評価する。
-
-単一symbolだけでTSMOM全体を判断しない。
+M3/M4で、symbol別 / common rule / portfolioを評価する。
 
 ## RQ4: Lookbackにplateauがあるか
 
 粗いgridのみ使用。
-
-例:
 
 ```text
 20 / 60 / 120 / 240 daily intervals
@@ -89,29 +78,17 @@ isolated optimumをbaseline採用しない。
 
 M5で、
 
-- return
-- Sharpe
-- DD
-- concentration
-- contribution balance
+- unscaled
+- practical vol-scaled
+- MOP-compatible reference-scaled
 
-を見る。
+を比較し、return / Sharpe / DD / concentration / contribution balanceを見る。
 
 risk scaling改善をsignal alpha改善と混同しない。
 
 ## RQ6: Costでedgeはどこまで減るか
 
-M6で、
-
-- spread
-- commission
-- slippage
-- turnover
-- break-even cost
-
-を評価する。
-
-historical cost seriesがなくてもscenario分析を行う。
+M6でspread / commission / slippage / turnover / break-even costを評価する。
 
 ## RQ7: Swap / financingはどの程度重要か
 
@@ -127,21 +104,13 @@ historical swapなしでFull broker netを名乗らない。
 
 ## RQ8: 年次・regime依存はどの程度か
 
-M7で、
+M7で、yearly returns / rolling 1y・3y / longest underwater / consecutive losing years / parameter x year / symbol x yearを見る。
 
-- yearly returns
-- rolling 1y / 3y
-- longest underwater
-- consecutive losing years
-- parameter x year
-- symbol x year
+## RQ9: Practical final holdoutでも残るか
 
-を見る。
+Track BではM7で初めてfinal holdoutを開封し、事前固定した仕様を変更せず評価する。
 
-## RQ9: Final holdoutでも残るか
-
-M7で初めてfinal holdoutを開封し、
-事前固定した仕様を変更せず評価する。
+Track Aのpublished sampleはこのholdoutとは別概念。
 
 ## RQ10: 短期化するとどこでedgeが崩れるか
 
@@ -155,13 +124,58 @@ turnover / spread / slippage / whipsaw増加を重点評価する。
 
 ## RQ11: Academic reference dataと自作系は整合するか
 
-`references/` 配下の資料を使い、可能な範囲で
+`references/` 配下の資料を使い、
 
 - published factor return
+- period / observation count
 - aggregate characteristics
-- signal direction（underlying dataが実際にあれば）
-- period / summary statistics
+- methodology metadata
 
 をsanity checkする。
 
 AQR workbookにraw underlying seriesが含まれることを事前に仮定しない。
+
+## RQ12: MOPのregression evidenceを再現できるか
+
+M1 Reference Comparatorで、
+
+- volatility-standardized monthly returns
+- pooled panel regression
+- lags `h=1...60 months`
+- monthly calendar-time clustering
+
+をMOP methodology comparatorとして実装する。
+
+特に12-month predictor / next-month returnとの整合を報告する。
+
+## RQ13: Huang et al.の統計的反証を再確認するとどうなるか
+
+M1で、
+
+- asset-by-asset regression
+- pooled regression
+- parametric wild bootstrap
+- nonparametric pairs bootstrap
+- fixed-effect sensitivity
+
+をchallenge analysisとして扱う。
+
+naive pooled t-statだけを結論にしない。
+
+## RQ14: TSMのprofitはpredictabilityなしのTSHより本当に強いか
+
+M3〜M7で、Huang et al.のTime-Series History (TSH) comparatorを実装する。
+
+最低限、
+
+- TSM return
+- TSH return
+- TSM - TSH
+- Sharpe / alpha差
+- long leg / short leg
+- weighting scheme sensitivity
+
+を見る。
+
+TSHのhistorical-mean windowはreference paperのexact definitionを固定してから実装する。
+論文仕様とcausal expanding-history analogueが異なる場合は別出力にする。

@@ -30,8 +30,7 @@ cost unit:
 > one-way basis points per unit normalized notional turnover
 
 ```text
-cost_return[t]
-  = turnover[t] * all_in_one_way_cost_bps / 10000
+cost_return[t] = turnover[t] * all_in_one_way_cost_bps / 10000
 ```
 
 ## Result Levels

@@ -1,14 +1,11 @@
-# M1 — Academic Hypothesis Check
+# M1 — Academic Hypothesis + Reference Statistical Validation
 
 ## Status
-Specification-ready after split/universe freeze.
+Ready after Track B split/universe freeze.
+Reference bootstrap algorithm details must be locked from `references/7.Time-series momentum_ Is it there_.pdf` while implementing the challenge module.
 
 ## 目的
-strategy PnLとは別に、TSMOMの中心的なpredictive relationを直接検証する。
-
-```text
-past 12-month return -> next 1-month return
-```
+strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのregression evidenceとHuang et al.の反証を同じresearch stageで確認する。
 
 ## 参照docs
 - `docs/02_research_questions.md`
@@ -20,48 +17,61 @@ past 12-month return -> next 1-month return
 
 ## 前提
 M0完了済み。
-さらにM1を見る前に、
-- development
-- validation
-- final holdout
-- symbol universe
-をfreeze済みであること。
+Track BについてM1結果を見る前にdevelopment / validation / final holdout / symbol universeをfreeze済み。
+Track A published sampleはreplication sampleとして別管理。
 
-## 固定仕様
+## Workstream A — Practical Track
 
-### Practical Track
 ```text
 P[M] = month M の最後のvalid Daily Close
 past_12m_return[M] = P[M] / P[M-12] - 1
 next_1m_return[M]  = P[M+1] / P[M] - 1
 ```
 
-### Academic Track
-futures / forward / excess-returnまたはreference dataが利用可能なら、
-spot resultと分離して評価する。
-
-## Primary analyses
+Primary:
 - sign-conditioned next-month return
 - continuous predictor regression
 - sign-predictor regression
 - symbol-level effect size
 - pooled / cross-market effect
-- confidence intervals
-- sample-size diagnostics
+- HAC / clustered uncertainty
 
-## Statistical policy
-naive IID standard errorのみをprimary evidenceにしない。
+## Workstream B — MOP Regression Comparator
 
-default:
-- symbol-level: HAC / Newey-West系
-- lag default: 12 months
-- pooled: two-way clustered SEが可能なら使用
-- alternative: calendar-month block bootstrap
-- method / lag / seedをmetadataへ保存
+- excess-return dataを使える場合は優先
+- ex-ante vol standardization
+- annualization 261
+- EWMA center-of-mass 60 days
+- `sigma[t-1]` information lag
+- pooled monthly regression
+- lag `h=1...60`
+- monthly calendar-time clustering
+- focused 12m cumulative -> next1m comparatorも別表
 
-## 実装対象
-M1はM3 multi-symbol backtest engineを必要としない。
-別のresearch/statistics moduleで複数symbol seriesを読んでよい。
+## Workstream C — Huang Challenge
+
+- asset-by-asset regression
+- pooled regression
+- fixed-effect sensitivity
+- scaled / unscaled sensitivity
+- parametric wild bootstrap
+- nonparametric pairs bootstrap
+
+bootstrap algorithmのresidual / null / resampling unitは`references/7.Time-series momentum_ Is it there_.pdf` から固定し、fixture testを作る。
+
+## Workstream D — AQR Reference Sanity
+
+workbookをinventoryし、factor seriesが確認できる場合:
+
+- period
+- frequency
+- observation count
+- unit
+- mean / vol / Sharpe
+- cumulative path
+
+をreportする。
+raw underlying seriesを仮定しない。
 
 ## 非対象
 - broker execution
@@ -69,24 +79,34 @@ M1はM3 multi-symbol backtest engineを必要としない。
 - swap
 - portfolio construction
 - parameter optimization
+- TSH portfolio comparison（M3-M7）
 
 ## 成果物
-- Track A / Track Bを分けたprediction tables
+- Track A / Track B separated prediction tables
+- MOP lag-regression table / figure
 - effect-size report
-- CI / inference metadata
+- bootstrap critical-value / p-value report
 - symbol-level table
 - pooled summary
+- AQR sanity report
 - sample diagnostics
+- inference metadata
 
 ## 完了条件
-- return definitions are deterministic and tested
-- no future leakage in formation variables
-- statistical method is recorded
+- return definitions deterministic and tested
+- no future leakage in formation / vol variables
+- MOP comparator and Practical analogue clearly labeled
+- bootstrap algorithm and seed recorded
+- pooled t-stat alone is not final evidence
 - Track A / Track B are not mixed
 - result language respects `docs/06_evaluation_protocol.md`
 
 ## 人間が決める未決事項
-M1開始前に実データに対して固定する:
-- development / validation / holdout dates
-- symbol universe
+M1開始前:
+- Track B split dates
+- Track B symbol universe
 - Academic Trackで利用可能なdata source
+
+implementation中・resultsを見る前:
+- Huang bootstrap exact algorithm details from reference paper
+- number of bootstrap replications（compute budgetと精度のtrade-offを事前固定）
