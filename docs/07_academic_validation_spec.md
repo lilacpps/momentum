@@ -259,17 +259,17 @@ report:
 
 **Paper-explicit**
 
-- null: pooled regressionのtime-series momentum slope `beta = 0` [Huang §4, Eq. (3), PDF p.13]
+- null: pooled regressionのtime-series momentum slope `beta = 0` [Huang §4.1, Eq. (3), journal p.780]
 - regression: volatility-standardized next return on lagged volatility-standardized return,
-  with an intercept; the focused case is past 12-month -> next 1-month [Huang §4, Eq. (3), PDF p.13]
-- residual: full-sample fitted regression residual [Huang §4, Eq. (8), PDF p.14]
+  with an intercept; the focused case is past 12-month -> next 1-month [Huang §4.1, Eq. (3), journal p.780]
+- residual: full-sample fitted regression residual [Huang §4.3, Eq. (8), journal p.783]
 - parametric wild bootstrap: fitted model plus residual multiplied by an independent
   Rademacher draw `v in {-1,+1}`, each probability 1/2; the predictor is held fixed
-  [Huang §4, Eqs. (8)–(10), PDF p.14]
+  [Huang §4.3, Eqs. (8)–(10), journal p.783]
 - nonparametric pairs bootstrap: observed `(standardized dependent, standardized predictor)`
-  pairsを、同時に、replacementありでT pairs resample [Huang §4, Eq. (11), PDF p.14]
+  pairsを、同時に、replacementありでT pairs resample [Huang §4.3, Eq. (11), journal p.784]
 - test statistic: pooled regression slope t-statistic
-- 1,000 simulated samples / method [Huang §4, PDF p.14]
+- 1,000 simulated samples / method [Huang §4.3, journal pp.783–784]
 
 MOP EWMA anchor: [MOP §2.4, journal PDF pp.233–234, volatility equation and lag statement]
 です。原典PDF版によってequation numberingが異なるため、MOPについてはsectionと印刷ページを

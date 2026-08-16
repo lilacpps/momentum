@@ -108,12 +108,24 @@ raw underlying seriesを仮定しない。
 - Track A / Track B are not mixed
 - result language respects `docs/06_evaluation_protocol.md`
 
+### Workstream completion and unblock rule
+
+- M1A complete: Practical predictability tables, diagnostics, and inference are complete after the Track B freeze.
+- M1B complete: eligible reference underlying data is available and the MOP comparator is executed; otherwise `data unavailable / pending`.
+- M1C-Huang-reference complete: Huang contract is frozen and eligible reference underlying data is available; otherwise `data unavailable / pending`.
+- M1C-Huang-practical-analogue complete: the same frozen challenge contract is executed on Track B data and labeled as an analogue, not a Huang replication.
+
+M1全体がcompleteでなくても、M1AがcompleteならM2をunblockする。M1B/M1Cの未完了はPractical Trackを停止しない。
+
 ## 人間が決める未決事項
 M1開始前:
 - Track B split dates
+- Track B validation / final holdout periods
 - Track B symbol universe
+- Track B data source / timezone / daily boundary
 - Academic Trackで利用可能なdata source
 
 M1C開始前:
 - Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T / statistic / p-value / missing）
-- number of bootstrap replications（paper-explicit 1,000）とseed policy
+- paper-explicit bootstrap replications = 1,000
+- implementation seed value and seed policy
