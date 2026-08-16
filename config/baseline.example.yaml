@@ -6,22 +6,32 @@ signal:
   type: return_sign
   lookback:
     value: 240
-    unit: bars
+    unit: return_intervals
+    required_close_observations: 241
   price_field: close
   information_lag_bars: 1
+  insufficient_history: undefined
 
 execution:
   frequency: every_bar
   price_field: open
   execute_on_next_bar: true
+  terminal_position_policy: leave_open
+  synthetic_terminal_liquidation: false
 
 position:
   long_value: 1.0
   short_value: -1.0
   flat_value: 0.0
+  undefined_signal_target: flat
   zero_signal: flat
   unchanged_signal: hold
   reversal: close_and_reverse
+
+accounting:
+  periodic_return: open_to_next_open
+  final_bar_without_next_open: exclude_periodic_return
+  open_trade_in_closed_trade_stats: false
 
 risk:
   volatility_normalization: false
@@ -37,4 +47,5 @@ costs:
 metadata:
   baseline_type: simplified_daily_tsmom
   academic_mop_replication: false
-  signal_return_type: price_return
+  signal_return_type: spot_price_return
+  result_level: gross_price_only

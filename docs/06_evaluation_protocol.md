@@ -1,306 +1,240 @@
-# Evaluation Protocol — What Can We Conclude at Each Stage?
+# Evaluation Protocol — What Can We Conclude at Each Milestone?
 
-## 1. この文書の目的
+## 1. 目的
 
-Time-Series Momentum研究では、単純なbacktestがプラスだっただけで
+backtestがプラスだっただけで、
 
 > TSMOMが再現した
 
-と結論すると、academic literature・strategy implementation・risk scaling・broker costを混同しやすい。
+とは結論しません。
 
-本プロジェクトでは、各段階で「何が分かり、何はまだ分からないか」を明示する。
+各Milestoneで何を言えるかを固定します。
 
 ---
-
-# 2. Evidence Ladder
 
 ## E0 — Engine Correctness
 
 対象: M0
 
-確認すること:
+言ってよい:
 
-- causal signal
-- correct lookback
-- correct execution timing
-- correct reversal
-- correct return accounting
+> 定義したM0 engineがcausalかつ仕様通り動く。
 
-言ってよいこと:
+まだ言えない:
 
-> M0仕様を実装したengineが仕様通り動く。
-
-まだ言えないこと:
-
-> TSMOMにはedgeがある。
+> TSMOMにedgeがある。
 
 ---
 
 ## E1 — Predictive Evidence
 
-対象: R0
+対象: M1
 
-確認すること:
+確認:
 
 ```text
-past ~12m return -> next 1m return
+past 12m return -> next 1m return
 ```
 
-言ってよいこと:
+言ってよい:
 
-> 手元data上で、academic TSMOMの中心的な方向予測関係が見える / 見えない。
+> Track A / Track Bそれぞれでdirectional predictabilityの証拠が見える / 見えない。
 
-commission等はこの結論に不要。
+Track Bのspot resultだけでpaper replicationとは言わない。
 
-まだ言えないこと:
+commissionは不要。
 
-> 現実のbrokerでnet profitableである。
+まだ言えない:
+
+> brokerでnet profitable。
 
 ---
 
 ## E2 — Strategy Construction Evidence
 
-対象: R1 / M1
+対象: M2 / M3
 
-確認すること:
+確認:
 
-- daily simplified strategy
-- academic-style monthly comparator
+- daily simplified
+- monthly academic-style
 - multiple symbols
-- turnover / holding differences
+- turnover / holding
 
-言ってよいこと:
+言ってよい:
 
-> このsignalを特定のposition ruleへ変換したgross strategyの性質。
+> signalを特定のposition ruleへ変換したgross strategyの性質。
 
-まだ言えないこと:
+まだ言えない:
 
-> portfolioとして優れている。
-> real costs後にも残る。
+> realistic costs後にも残る。
 
 ---
 
-## E3 — Portfolio Evidence
+## E3 — Portfolio / Risk Evidence
 
-対象: M2 / M3
+対象: M4 / M5
 
-確認すること:
+確認:
 
 - diversification
 - equal-notional
-- volatility-scaled
+- volatility scaling
 - concentration
 
-言ってよいこと:
+言ってよい:
 
-> cross-market diversificationとrisk scalingを含むportfolio特性。
+> portfolio constructionとrisk scalingを含むgross特性。
 
-注意:
-
-volatility scalingの改善をsignal alphaそのものの改善としない。
+vol scaling改善をsignal alphaと混同しない。
 
 ---
 
-## E4 — Cost Robustness Evidence
+## E4 — Cost Robustness
 
-対象: M4
+対象: M6
 
-確認すること:
+historical cost seriesがなくても、
 
-- plausible commission
-- spread
-- slippage
+- plausible scenarios
 - turnover
 - break-even cost
 
-historical cost seriesがなくても実施可能。
+で評価可能。
 
-言ってよいこと:
+言ってよい:
 
-> strategy edgeが想定cost rangeに対してrobust / fragileである。
+> 想定cost rangeに対してedgeがrobust / fragile。
 
-historical seriesが不足する場合、まだ言えないこと:
+まだ言えない:
 
-> 過去の特定brokerで実際にこのNet PnLだった。
+> 特定brokerで過去にこのNet PnLだった。
 
 ---
 
-## E5 — Broker-Net Evidence
+## E5 — Robust / Holdout Evidence
 
-対象: historical execution / financing dataが十分な場合のみ
+対象: M7
 
-確認すること:
+final holdoutを一度だけ評価。
 
-- historical spread / fee schedule
+言ってよい:
+
+> 事前固定したstrategyが未見期間でもどの程度維持されたか。
+
+holdoutを見てruleを変えたら、その後は新しいholdoutが必要。
+
+---
+
+## E6 — Broker-Net Evidence
+
+十分なhistorical execution / financing dataがある場合のみ。
+
+必要:
+
+- spread
+- fee schedule
 - realistic slippage
-- historical swap / financing
+- swap / financing
 - contract specification
 
-言ってよいこと:
+言ってよい:
 
 > 特定broker条件を近似したhistorical net simulation。
 
-それでもtick-level約定等がなければ「完全再現」とは限らない。
+tick-level約定がなければ完全再現とは限らない。
 
 ---
 
-# 3. Commissionデータがなくても研究する意味
+# Commissionデータがなくても研究する意味
 
-ある。
+あります。
 
-commission履歴がなくても、研究上は少なくとも以下を分離できる。
+- M1: cost不要
+- M0〜M5: signal / strategy / portfolioのgross構造を研究
+- M6: scenario + break-even cost
+- actual historical broker netだけ主張しない
 
-### Predictability
+という分離ができます。
 
-R0ではcost自体が不要。
+---
 
-### Gross strategy behavior
+# Swapデータがない場合
 
-M0〜M3では、signalとposition constructionの性質をcostから分離して見る。
-
-### Cost robustness
-
-M4では
+結果を、
 
 ```text
-0
-low
-base
-high
+Level 1 Gross price-only
+Level 2 Net ex-financing
+Level 3 Full broker net
 ```
 
-等のscenarioを置く。
+に分けます。
 
-さらにbreak-even costを計算し、未知の実コストに対してedgeが十分大きいかを判断する。
+Level 3を無理に作りません。
 
-したがって、commission履歴がないことは
-
-> 研究が無意味
-
-を意味しない。
-
-意味するのは
-
-> exact historical broker net PnLという強い主張はできない
-
-ということである。
+current swapの過去一律適用は原則避けます。
 
 ---
 
-# 4. Swapデータがない場合
+# Decision Gates
 
-Daily / long-horizon FX/CFDではcommissionより重大になり得る。
+## Gate M0
 
-swapは保有期間中累積し、direction / symbol / date / broker条件に依存する。
+必要:
 
-historical swapがない場合は、結果を次のように分ける。
+- golden tests
+- causality
+- accounting
 
-```text
-Level 1: Gross price-only
-Level 2: Net ex-financing
-Level 3: Full broker net
-```
+次へ進む前にsplit/universe freeze。
 
-Level 3を無理に作らない。
+## Gate M1
 
-current swapをhistorical全期間へ適用することは原則避ける。
+確認:
 
-将来のforward testではactual swapを保存し、Level 3評価能力を高める。
+- Academic Track
+- Practical Track
+- uncertainty
 
----
+弱くても即終了ではないが、
+academic replicationとpractical trend explorationの目的を混同しない。
 
-# 5. Academic TrackとPractical Track
+## Gate M2
 
-## Track A — Academic Validation
+確認:
 
-問い:
+- daily vs monthly implementation差
 
-> academic TSMOMのsignal / evidenceと自作研究系は整合するか？
+## Gate M3/M4
 
-利用:
-
-- original paper
-- AQR Original Paper Data
-- academic-style monthly comparator
-- futures / forward dataが得られれば優先
-
-## Track B — Practical FX/CFD
-
-問い:
-
-> 手元のspot/CFD dataと現実的executionで利用可能なedgeか？
-
-利用:
-
-- broker OHLC
-- next-open execution
-- commission/spread scenarios
-- swap dataがあれば追加
-
-この2つが一致する必要はない。
-
-例えばTrack Aでacademic evidenceが確認できても、Track Bではswap/costで消える可能性がある。
-逆にTrack Bの特定symbolだけで利益が出ても、それだけでacademic evidenceの再現とはしない。
-
----
-
-# 6. 推奨Decision Gates
-
-## Gate 0 — M0完了
-
-進む条件:
-
-- golden tests通過
-- causality通過
-- execution / accounting確定
-
-profitabilityは条件にしない。
-
-## Gate 1 — R0/R1確認
-
-確認する:
-
-- academic hypothesisとの方向整合
-- M0 vs academic-style comparator差
-
-結果が弱くても即終了ではないが、今後の目的を
-
-- academic replication
-- practical trend strategy exploration
-
-のどちらに置くか再確認する。
-
-## Gate 2 — M1/M2
-
-確認する:
+確認:
 
 - symbol横断性
-- portfolio diversification
+- diversification
 
-単一symbol optimumに依存する場合はbaseline採用しない。
+## Gate M5
 
-## Gate 3 — M3
-
-確認する:
+確認:
 
 - unscaledで何が残るか
 - scalingで何が改善するか
 
-## Gate 4 — M4
+## Gate M6
 
-確認する:
+確認:
 
 - break-even cost
-- realistic scenarioでedgeが残るか
-- financing不足による結論制約
+- realistic cost scenarios
+- financing limitation
 
-## Gate 5 — M5
+## Gate M7
 
-確認する:
+確認:
 
-- holdout
 - plateau
+- validation
+- final holdout
 - year / symbol robustness
-- walk-forward
 
-ここまで通って初めて、4h / 1hや追加filterの研究へ進む。
+ここまで通ってからM8/M9へ進む。

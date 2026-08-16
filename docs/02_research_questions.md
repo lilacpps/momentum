@@ -1,56 +1,107 @@
 # Research Questions
 
-## RQ0: Pure directional TSMOM signalは手元データでも存在するか
+## RQ0: Time-Series predictabilityは手元dataでも見えるか
 
-まず、strategy PnLだけでなく、academic literatureに近い予測問題として直接確認する。
-
-Research checkpoint R0では主に、
+M1で、strategy PnLではなく予測問題として直接確認する。
 
 ```text
-past approximately 12-month return
-        ->
+past 12-month return
+      ->
 next 1-month return
 ```
 
-の関係を見る。
+見るもの:
 
-確認候補:
-
-- `E[next_1m_return | past_12m_return > 0]`
-- `E[next_1m_return | past_12m_return < 0]`
-- continuous past-return predictor
-- sign predictor
+- sign-conditioned future return
+- continuous predictor
+- effect size
+- uncertainty
 - symbol別
-- pooled / market横断
+- pooled / cross-market
 
-M0のdaily strategy PnLだけをRQ0の答えとしない。
+M0のdaily PnLだけを答えにしない。
 
-## RQ1: Edgeは単一symbol依存か
+## RQ1: Academic dataとspot/CFD analogueはどう違うか
 
-- symbol別
-- market横断
-- portfolio
+M1を2 trackに分ける。
 
-single-symbolで弱い、または負であることだけでTSMOM全体を棄却しない。
-逆に、単一symbolだけで非常に強い結果も十分な証拠とはみなさない。
+### Academic Track
 
-## RQ2: Lookbackにplateauがあるか
+可能ならfutures / forward / excess-returnまたはAQR referenceを使う。
 
-- 20 / 60 / 120 / 240 barsなどの粗いgrid
-- isolated optimumを採用しない
-- parameterを細かく探索して最高値を選ばない
+### Practical Track
 
-## RQ3: Volatility normalizationは何を改善するか
+spot/CFD price returnを使う。
+
+後者が有意でもMOP完全再現とは呼ばない。
+
+## RQ2: Daily simplified baselineとmonthly comparatorはどう違うか
+
+M2で比較する。
+
+### M0 Daily
+
+- 240 observed intervals
+- daily refresh
+- next-open execution
+- target変更までhold
+
+### M2 Monthly
+
+- 12 completed calendar months
+- monthly decision
+- next-month first open execution
+- 1-month holding
+
+差を見る:
 
 - gross return
+- DD
+- turnover
+- holding period
+- direction agreement
+
+## RQ3: Edgeは単一symbol依存か
+
+M3/M4で、
+
+- symbol別
+- common rule
+- portfolio
+
+を評価する。
+
+単一symbolだけでTSMOM全体を判断しない。
+
+## RQ4: Lookbackにplateauがあるか
+
+粗いgridのみ使用。
+
+例:
+
+```text
+20 / 60 / 120 / 240 daily intervals
+```
+
+isolated optimumをbaseline採用しない。
+
+## RQ5: Volatility normalizationは何を改善するか
+
+M5で、
+
+- return
 - Sharpe
 - DD
 - concentration
 - contribution balance
 
-signal alphaとrisk engineeringを分離する。
+を見る。
 
-## RQ4: Costでedgeはどこまで減るか
+risk scaling改善をsignal alpha改善と混同しない。
+
+## RQ6: Costでedgeはどこまで減るか
+
+M6で、
 
 - spread
 - commission
@@ -58,79 +109,59 @@ signal alphaとrisk engineeringを分離する。
 - turnover
 - break-even cost
 
-historical cost seriesが存在しない場合も、cost scenarioとbreak-even analysisで耐コスト性を評価する。
+を評価する。
 
-## RQ5: Swap / financingはどの程度重要か
+historical cost seriesがなくてもscenario分析を行う。
 
-正確なhistorical swapがない場合は、推測値を「実績Net PnL」として混ぜない。
+## RQ7: Swap / financingはどの程度重要か
 
 比較候補:
 
-- gross price-only
-- net ex-financing
+- Gross price-only
+- Net ex-financing
 - historical swap available subset
-- policy-rate differential proxy（research proxyでありbroker PnL再現ではない）
-- future forward-testで記録したactual broker swap
+- financing proxy（proxyと明記）
+- future forward-test actual swap
 
-positive-swap-only filter等はbaseline cost treatmentではなく別strategyとして扱う。
+historical swapなしでFull broker netを名乗らない。
 
-## RQ6: 年次の凸凹はどの程度か
+## RQ8: 年次・regime依存はどの程度か
+
+M7で、
 
 - yearly returns
 - rolling 1y / 3y
 - longest underwater
 - consecutive losing years
+- parameter x year
+- symbol x year
 
-## RQ7: 短期化するとどこでedgeが崩れるか
+を見る。
 
+## RQ9: Final holdoutでも残るか
+
+M7で初めてfinal holdoutを開封し、
+事前固定した仕様を変更せず評価する。
+
+## RQ10: 短期化するとどこでedgeが崩れるか
+
+M8/M9:
+
+```text
 Daily -> 4h -> 1h
+```
 
-cost / turnover / whipsawの増加を測る。
+turnover / spread / slippage / whipsaw増加を重点評価する。
 
-## RQ8: Simplified Daily BaselineとAcademic-style TSMOMはどの程度異なるか
+## RQ11: Academic reference dataと自作系は整合するか
 
-比較する:
+`references/` 配下の資料を使い、可能な範囲で
 
-### Simplified Daily
-
-- Daily
-- 240 observed bars
-- daily signal refresh
-- reverse when target changes
-- initially unscaled
-
-### Academic-style comparator
-
-- monthly decision frequency
-- approximately 12-month past return
-- next 1-month holding
-- initially unscaled
-- spot/CFD price-return implementationであることを明示
-
-その後、volatility scalingを追加した比較も行う。
-
-目的は、「TSMOM」というラベルの下で実装差を混同しないことである。
-
-## RQ9: Price momentumとexcess-return / carryを含むmomentumはどの程度異なるか
-
-spot FX / CFDのprice-return signalと、futures / forwardsを使ったacademic return definitionには差がある。
-
-可能なデータが確保できた段階で、
-
-- price-only
-- carry / financingを含むreturn
-- academic excess-returnに近いreturn
-
-を分けて評価する。
-
-## RQ10: Academic reference dataと自作実装は整合するか
-
-`references/` 配下の原論文・AQR Original Paper Data等を用い、可能な範囲で
-
-- signal direction
-- return seriesの方向性
+- published factor return
 - aggregate characteristics
+- signal direction（underlying dataが実際にあれば）
+- period / summary statistics
 
 をsanity checkする。
 
-これはbroker spot/CFD PnLの再現とは別trackとする。
+AQR workbookにraw underlying seriesが含まれることを事前に仮定しない。

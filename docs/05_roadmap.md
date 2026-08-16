@@ -1,222 +1,215 @@
 # Development Roadmap
 
-このroadmapでは、software implementation milestoneを `M*`、research checkpointを `R*` とする。
+全工程を `M0...M9` に統一します。
 
-R0/R1は新しいengineを大規模に作るMilestoneではなく、次の実装段階へ進む前に研究上の意味を確認するcheckpointである。
-
-## M0 — Single-Symbol Unscaled Daily TSMOM Baseline
-
-### 主目的
-
-**Engine correctness**。
-
-TSMOMのdirectional componentを、portfolio / volatility scaling / costから分離して実装する。
-
-M0のprofitability自体を合否条件にしない。
-
-### 成果
-
-- Daily OHLC data contract
-- causal return-sign signal
-- explicit signal / execution timing
-- Long / Short / Flat state engine
-- reversal handling
-- normalized gross return
-- trade / position ledger
-- basic gross metrics
-- unit / golden tests
-
-### 非対象
-
-- multi-symbol
-- portfolio aggregation
-- volatility scaling
-- transaction costs
-- swap
-- TP / SL
-- parameter optimization
-- walk-forward
-
-### 完了条件
-
-- hand-calculated signal fixtureと完全一致
-- entry / exit / reversal fixtureと完全一致
-- gross PnL fixtureと完全一致
-- lookahead mutation test通過
-- warm-up期間でpositionを取らない
-- unchanged signalで不要なtradeを生成しない
-- zero signalがFlatとして機能する
-- invalid input dataを仕様通り処理
-- M0処理経路にcost / volatility / portfolio logicが混入していない
+研究checkpointもproject progression上のMilestoneとして扱います。
 
 ---
 
-## R0 — Academic Hypothesis Check
+## M0 — Single-Symbol Unscaled Daily TSMOM / Engine Correctness
 
 ### 目的
 
-strategy engineのprofitabilityとは別に、TSMOMの中心的predictive relationを直接確認する。
+causal daily engineを正しく実装する。
 
-### 基本検証
+### 成果
+
+- Daily OHLC contract
+- 240-return-interval signal
+- next-open execution
+- Long / Short / Flat
+- reversal
+- open-to-next-open gross return
+- ledger
+- golden/unit tests
+
+### 非対象
+
+- profitabilityを合否条件にすること
+- multi-symbol
+- portfolio
+- vol scaling
+- costs
+- optimization
+
+### 完了条件
+
+- 241 Close requirementを含むoff-by-one test
+- hand-calculated signal一致
+- execution一致
+- PnL一致
+- lookahead mutation通過
+- warm-up正しい
+- unchanged signalで余計なtradeなし
+- zero signal Flat
+- terminal open positionをsynthetic liquidationしない
+- invalid input処理
+- deterministic
+
+### Gate
+
+M0完了直後、M1開始前にhistorical splitとsymbol universeをfreezeする。
+
+---
+
+## M1 — Academic Hypothesis Check
+
+### 目的
+
+strategy engineとは別に、
 
 ```text
-past approximately 12-month return
-        ->
-next 1-month return
+past 12-month return -> next 1-month return
 ```
+
+のpredictabilityを直接確認。
+
+### Track A
+
+academic / excess-return / reference data。
+
+### Track B
+
+spot/CFD price-return analogue。
 
 ### 成果
 
 - sign-conditioned future returns
-- continuous predictor results
-- symbol別結果
-- pooled / cross-market results
-- uncertainty / sample size diagnostics
+- continuous predictor
+- effect size / CI
+- symbol別
+- pooled
+- robust uncertainty
+- sample diagnostics
 
-### Cost
-
-commission / spread / swapは不要。
-R0はnet trading PnLではなくpredictabilityの検証だからである。
-
-### 判定
-
-R0が弱くても研究終了とは限らないが、M0の収益性だけを根拠に「academic TSMOMが再現した」とは言わない。
+M1はM3のmulti-symbol backtest engineを要求しない。
+別の軽量research moduleで複数seriesを読んでよい。
 
 ---
 
-## R1 — Academic-Style Comparator
-
-### 目的
-
-M0のdaily refresh / reversal仕様と、academic literatureへ近いholding conventionを比較する。
+## M2 — Academic-Style Monthly Comparator
 
 ### 初期仕様
 
-- monthly decision frequency
-- approximately 12-month past price return
-- 1-month holding
+- month-end signal decision
+- 12 completed calendar months formation
+- next calendar month first available Daily Openでexecution
+- 次月first available Openまでhold
 - gross
 - unscaled
 - spot/CFD price data
 
-### 注意
-
-spot/CFD price dataを使うため、MOPのfutures / forward excess-return完全再現ではない。
-
 ### 成果
 
-- M0 Daily vs R1 Monthly comparator
-- turnover差
-- holding差
-- return / DD等の差
+- M0 Daily vs M2 Monthly
+- turnover
+- holding period
+- return / DD
+- signal agreement
+
+M2のためにM0を万能schedulerへ過剰一般化しない。
+signal/target generationとexecution/accountingの境界を再利用する。
 
 ---
 
-## M1 — Multi-Symbol Common Rule
+## M3 — Multi-Symbol Common Rule
 
-M0と同じruleを複数symbolへ独立適用する。
+M0と同じdaily ruleを複数symbolへ独立適用。
 
-### 成果
-
-- symbol別backtest
 - symbol別metrics
-- same parameter contract
+- common parameter
+- symbol-specific tuningなし
 
-M1ではまだportfolio aggregationを行わない。
-
-### 完了条件
-
-- symbol固有strategy parameterなしで実行可能
-- single-symbol engineを変更せず再利用可能
+可能ならM2 comparatorも同じuniverseで出す。
 
 ---
 
-## M2 — Portfolio Aggregation
+## M4 — Portfolio Aggregation
 
-M1のsymbol別returnをportfolioへ集約する。
+初期baselineはequal-notional。
 
-### 成果
+原則:
+
+- experiment universeを事前固定
+- common valid start以降で比較
+- ex-post symbol selectionなし
+
+成果:
 
 - portfolio equity
-- portfolio return
-- drawdown
+- return
+- DD
 - Sharpe
-- exposure summary
-
-M2ではまずequal-notional aggregationを標準とする。
-
----
-
-## M3 — Volatility Normalization
-
-directional signalを変えず、position sizingのみ変更する。
-
-### 成果
-
-- unscaled / equal-notional
-- volatility-scaled / equal-risk
-
-の比較。
-
-Academic TSMOMとのvolatility methodology差分を記録する。
-
-vol scalingによる改善をsignal predictability改善と混同しない。
+- exposure
+- contribution
 
 ---
 
-## M4 — Cost and Financing Layer
+## M5 — Volatility Normalization
 
-### 成果
+directional signalを変えずsizingのみ変更。
+
+比較:
+
+- equal-notional
+- equal-risk / volatility-scaled
+
+vol estimator / target riskはM5開始前に仕様化する。
+
+---
+
+## M6 — Cost and Financing Layer
+
+成果:
 
 - spread
 - commission
 - slippage
-- gross / net separation
-- swap / financing capability
-- cost scenarios
+- turnover
 - break-even cost
-- Result Level labeling
+- scenario analysis
+- gross / net separation
+- financing capability
+- Result Level
 
-### historical commission / spreadが不足する場合
-
-plausible low / base / high scenariosで耐コスト性を評価する。
-正確なhistorical broker replicationとは呼ばない。
-
-### historical swapが不足する場合
-
-`Net ex-financing` までを主要結果とし、`Full broker net` は作らない。
+historical swap不足時はFull broker netを作らない。
 
 ---
 
-## M5 — Robust Validation
+## M7 — Robust Historical Validation
 
-### 成果
+成果:
 
-- parameter plateau
-- chronological development / validation / holdout
-- year slice
-- symbol slice
-- cost stress
+- plateau
+- development / validation
+- year / symbol slice
 - rolling metrics
-- underwater analysis
+- underwater
 - walk-forward
-- M0 vs R1 academic-style comparatorの再確認
-- always-long等のbenchmark（必要に応じて）
+- cost stress
+- benchmark
+- final holdout one-shot evaluation
 
-この時点までにTrack A Academic ValidationとTrack B Practical FX/CFD Researchを分けて報告できる状態にする。
-
----
-
-## M6 — 4h Momentum
-
-Dailyと同じ研究プロトコルを短期化する。
-
-Dailyよりcost / execution assumptionsへの依存が強くなるため、M4のcost frameworkを先に完了させる。
+ここまででTrack A / Track Bを分けて報告可能にする。
 
 ---
 
-## M7 — 1h Momentum
+## M8 — 4h Momentum
 
-turnover / execution cost / slippage / whipsawを重点評価する。
+Dailyと同じ研究protocolを短期化。
 
-historical spread / execution dataが不十分な場合、結論の強さをDailyよりさらに制限する。
+M6 cost framework完了後に開始。
+
+---
+
+## M9 — 1h Momentum
+
+重点:
+
+- turnover
+- spread
+- slippage
+- whipsaw
+- execution sensitivity
+
+historical execution data不足時はDailyより結論を弱くする。

@@ -1,24 +1,8 @@
 # Data and Cost Policy
 
-## Data
+# 1. M0 Data Contract
 
-最低限必要:
-
-- timestamp
-- OHLC
-- symbol
-
-可能なら:
-
-- bid/ask
-- spread
-- tick volume / volume
-
-## M0 Data Contract
-
-M0ではsingle-symbol Daily OHLCを入力とする。
-
-最低限必要なcolumn:
+M0入力:
 
 ```text
 timestamp
@@ -28,112 +12,139 @@ low
 close
 ```
 
-### Timestamp
+single-symbol Daily OHLCを基本とします。
 
-timestampが
+## Timestamp
 
-- bar open time
-- bar close time
+data sourceごとに、
 
-のどちらを表すかをdata sourceごとにmetadataへ記録する。
+- timestampがbar openかcloseか
+- timezone
+- daily session boundary
+- source
+- price type
 
-strategy内部では、各barがchronological orderで一意に並べられることを必須とする。
+をmetadataへ記録します。
 
-### Ordering
+## Ordering
 
-入力dataは `timestamp ascending` でなければならない。
+timestamp ascendingを必須とします。
 
-実装が自動sortする場合でも、元dataがunsortedだった事実を検出可能にする。
+unsorted inputを自動sortする場合も、元dataがunsortedだったことを検出可能にします。
 
-### Duplicate
+## Duplicate
 
-同一timestampの重複barを黙って採用してはならない。
-M0では原則errorとする。
+duplicate timestampは黙って処理せず、M0では原則error。
 
-### Missing values
+## Missing values
 
-signalやexecutionに必要なOHLCがNaNのbarをforward-fillしてはならない。
-特にcloseをforward-fillしてlookbackを成立させてはならない。
+OHLCをforward-fillしてsignalやexecutionを成立させません。
 
-欠損barの扱いはdata preprocessing段階で明示する。
+特にcloseのforward-fillは禁止。
 
-### Lookback semantics
+欠損barを除外する場合、その処理をpreprocessing metadataへ残します。
 
-`lookback_bars = N` は、**valid observed barsをN本遡る**ことを意味する。
-calendar timedeltaとしてN日を遡ることを意味しない。
+## Lookback semantics
 
-## FXの日足境界
+`lookback_intervals=N` はN本のreturn intervalを意味します。
 
-broker/server timezoneでDaily barが変わるため、複数データソースを混ぜる場合は境界を固定する。
+必要Close observationsは `N+1`。
 
-同一experiment内ではdaily boundaryを固定する。
-
-可能ならmetadataへ以下を記録する。
+例えば240なら、
 
 ```text
-source
-timezone
-daily_session_boundary
-price_type
+Close[t-1] / Close[t-241] - 1
 ```
+
+です。
+
+## Daily boundary
+
+FX/CFDではbroker/server timezoneによりDaily barが異なるため、
+同一experiment内ではboundaryを固定します。
+
+複数sourceを無条件に混ぜません。
 
 ## Price type
 
-使用価格が
+最低限、
 
-- bid
-- ask
-- mid
-- broker chart OHLC
+```text
+bid / ask / mid / broker_chart
+```
 
-のどれかを記録する。
+のどれかを記録します。
 
-M0ではgross research baselineであるため、broker chart OHLCを使用可能とするが、Net execution priceとはみなさない。
+M0のbroker-chart OHLCはgross research priceであり、
+Net execution priceとはみなしません。
 
-## Price ReturnとAcademic Excess Return
+---
 
-M0はspot/CFD price seriesのprice changeをsignalへ利用する。
+# 2. Monthly Research Data Contract — M1/M2
 
-これはfutures / forwardを用いるacademic literatureのexcess-return seriesと同一ではない。
+daily dataからmonth-end seriesを作る場合、
 
-特に、
+```text
+month_end_price[M]
+  = calendar month M の最後のvalid daily Close
+```
+
+とします。
+
+M1 Practical Track:
+
+```text
+past_12m_return[M]
+  = month_end_price[M] / month_end_price[M-12] - 1
+
+next_1m_return[M]
+  = month_end_price[M+1] / month_end_price[M] - 1
+```
+
+これは統計的predictability用であり、
+tradable next-open PnLとは別です。
+
+M2のexecutionは `docs/07_academic_validation_spec.md` に従います。
+
+---
+
+# 3. Price ReturnとAcademic Excess Return
+
+spot/CFD price returnは、
+futures / forward excess returnと同一ではありません。
+
+差には、
 
 - currency carry
 - futures roll yield
 - financing
 - broker swap
 
-等の扱いが異なる。
+が含まれ得ます。
 
-したがってM0からacademic futures / forward strategyのreturnを直接再現したとは解釈しない。
+Track A / Track Bを分離して報告します。
 
-# Transaction Cost Policy
+---
 
-## 目的
+# 4. Transaction Cost Policy
 
-コスト研究では、次の2つを分離する。
+目的を2つに分けます。
 
-1. **historical broker PnLを正確に再現できるか**
-2. **strategy edgeが現実的なcostに耐えられるか**
+1. historical broker PnLを再現する
+2. strategy edgeが現実的costに耐えるか調べる
 
-historical commission / spread / swap seriesが不足していても、2は検証可能である。
+historical cost series不足でも2は可能です。
 
 ## Result Levels
 
-結果のラベルを次の3段階に分ける。
-
 ### Level 1 — Gross price-only
-
-```text
-Gross price-only
-```
 
 - spreadなし
 - commissionなし
 - slippageなし
-- swap / financingなし
+- financingなし
 
-M0〜M3の基本結果。
+M0〜M5の基本。
 
 ### Level 2 — Net ex-financing
 
@@ -144,9 +155,7 @@ Gross
 - slippage
 ```
 
-swap / financingを含めない。
-
-historical swapがない環境では、このレベルまではscenario analysisとして評価可能である。
+swap / financingなし。
 
 ### Level 3 — Full broker net
 
@@ -158,90 +167,115 @@ Gross
 - swap / financing
 ```
 
-historical条件が十分に再現できる場合のみこの名称を使用する。
+historical条件が十分に再現可能な場合だけこの名称を使います。
 
-historical swapがない場合、Level 2をLevel 3と呼んではならない。
+---
 
-## Commission
+# 5. M6 Cost Unit Contract
 
-commissionの完全なhistorical time seriesがなくても、fee scheduleを
+normalized positionの絶対変化をturnoverとします。
+
+```text
+turnover[t] = abs(position[t] - position[t-1])
+```
+
+例:
+
+```text
+Flat -> Long   = 1
+Long -> Flat   = 1
+Long -> Short  = 2
+```
+
+cost parameterは原則、
+
+> **one-way basis points per unit normalized notional turnover**
+
+へ正規化します。
+
+```text
+cost_return[t]
+  = turnover[t] * all_in_one_way_cost_bps / 10000
+```
+
+round-trip quoteしかない場合はone-wayへ変換してmetadataへ残します。
+
+break-even costも同じ単位で報告します。
+
+---
+
+# 6. Commission
+
+historical scheduleがなくても、
 
 - per lot
 - per notional
 - bps
 
-等へ正規化できる場合はscenarioとしてモデル可能である。
+をone-way bpsへ変換可能ならscenario分析できます。
 
-正確な過去scheduleが不明な場合は、単一の推測値を真値とせず、例えば
+例:
 
 ```text
-commission = 0
-commission = low
-commission = base
-commission = high
+0
+low
+base
+high
 ```
 
-のようなscenarioを用いる。
+一点推定を真値扱いしません。
 
-## Spread / Slippage
+---
 
-bid/ask履歴やtick-level execution dataがない場合も、
+# 7. Spread / Slippage
+
+bid/askやtick execution履歴がない場合:
 
 ```text
-0 cost
-low cost
-base cost
+0
+low
+base
 1.5x base
 2.0x base
 ```
 
-等の感度分析を行う。
+などでcost robustnessを確認します。
 
-この結果は「historical execution replication」ではなく「cost robustness」と呼ぶ。
+historical execution replicationとは呼びません。
 
-## Break-even Cost
+---
 
-M4では、可能な限り **break-even cost** を計算する。
+# 8. Break-even Cost
 
-目的は、実コストを一点推定するよりも、
+M6で必須診断とします。
 
-> strategyがどの程度のall-in transaction costまで耐えられるか
+> gross edgeがゼロになるall-in one-way cost level
 
-を示すことである。
+を求めます。
 
-turnoverの定義と単位を明示した上で、strategy gross edgeがゼロになるcost水準を求める。
+実コストの一点推定より、
+edgeにどの程度cost余裕があるかを重視します。
 
-break-even costが現実的costより十分に高いか低いかを、M4以降の主要診断とする。
+---
 
-## Swap / Financing
-
-長期FX/CFDではswap / financingの影響が大きくなり得る。
+# 9. Swap / Financing
 
 historical swapがない場合:
 
-1. 現在のswapを過去全期間へ一律適用しない。
-2. swapなし結果を「Full broker net」と呼ばない。
-3. policy-rate differential等を使う場合はresearch proxyと明示する。
-4. historical swapが得られるsubsetでは別途検証する。
-5. 今後のforward testではactual broker swapを記録する。
+1. current swapを過去全期間へ一律適用しない
+2. Level 2をFull broker netと呼ばない
+3. proxyはresearch proxyと明示
+4. historical subsetがあれば別評価
+5. future forward testでactual swapを記録
 
-## Milestone Boundary
+Daily/long-horizon FX/CFDではcommissionより重要になる可能性があるため、
+欠落を明示します。
 
-### M0〜M3
+---
 
-- Level 1 Gross price-onlyを基本とする。
-- transaction costをstrategy logicへ混ぜない。
+# 10. Milestone Boundary
 
-### M4
-
-- spread
-- commission
-- slippage
-- swap / financing capability
-- scenario analysis
-- break-even cost
-
-を追加する。
-
-コストデータが不完全でもM4は実施できる。
-ただし結論の強さをResult Levelに応じて制限する。
+- M0〜M5: Level 1 Grossを基本
+- M6: cost / financing capabilityとscenario
+- M7: robustness / holdout上でもcost sensitivityを確認
+- M8/M9: M6 cost framework完了後に短期化

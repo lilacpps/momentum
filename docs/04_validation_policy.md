@@ -2,172 +2,40 @@
 
 ## 原則
 
-Momentumは単純だからこそ、複雑な最適化で「良くしすぎない」。
+以下を混同しません。
 
-また、以下を混同しない。
+1. engineが正しい
+2. predictive relationがある
+3. gross strategyとして性質が良い
+4. portfolioとして有用
+5. cost後にも残る
+6. broker historical netを近似再現できる
 
-1. software / engineが正しいか
-2. predictive relationが存在するか
-3. strategyとして収益性があるか
-4. portfolioとして有用か
-5. realistic cost後にも残るか
-6. broker PnLを正確に再現できるか
+---
 
-各段階は別の証拠を必要とする。
+# 1. Validation Sequence
 
-# Validation Architecture
+## M0 — Engineering Validation
 
-## Stage E0 — Engineering Validation (M0)
-
-目的はコードの正しさであり、profitabilityの判定ではない。
-
-使用してよいもの:
-
-- synthetic fixture
-- hand-calculated fixture
-- small development sample
+profitabilityではなくcorrectnessを判定。
 
 必須:
 
+- golden fixture
+- off-by-one
 - lookahead mutation
-- off-by-one tests
 - execution timing
-- state transitions
-- PnL accounting
+- state transition
+- return accounting
+- terminal policy
 - deterministic output
 - invalid data handling
 
-**M0がnegative returnでもM0失敗とはしない。**
-M0の完了条件はengine correctnessで判定する。
+M0がnegativeでもcorrectなら完了。
 
-## Stage R0 — Academic Hypothesis Check
+## ★ M0完了直後: Split Lock
 
-M0直後に、trading engineの結果とは別に、academic literatureの中心的な予測問題を直接確認する。
-
-基本形:
-
-```text
-past approximately 12-month return
-        ->
-next 1-month return
-```
-
-確認候補:
-
-- sign-conditioned future return
-- continuous predictor regression
-- symbol-by-symbol results
-- pooled / cross-market results
-- confidence intervals / statistical uncertainty
-
-R0ではcommission / spread / swapは不要である。
-ここで調べるのはexecution後のnet profitabilityではなく、return predictabilityだからである。
-
-## Stage R1 — Academic-Style Strategy Comparator
-
-M0 daily strategyと別に、academic literatureへ近いdecision cadenceを持つcomparatorを用意する。
-
-初期仕様:
-
-```text
-monthly decision
-approximately 12-month past price return
-1-month holding
-gross
-unscaled
-```
-
-spot/CFD price dataを使う限り、MOPのfutures / forward excess-return完全再現とは呼ばない。
-
-R1の目的は、M0の結果が
-
-- TSMOM signalによるものか
-- daily refresh / reversalというimplementation choiceによるものか
-
-を分離することである。
-
-## Stage R2 — Multi-Symbol / Portfolio
-
-M1/M2で同一ruleを複数symbolへ適用し、単一市場依存を確認する。
-
-single-symbolの結果のみでTSMOM全体を評価しない。
-
-## Stage R3 — Risk Scaling
-
-M3でvolatility normalizationを追加し、
-
-- unscaled signal result
-- scaled portfolio result
-
-を分離する。
-
-vol scalingでSharpeが改善した場合、それをsignal predictabilityの改善と表現しない。
-
-## Stage R4 — Cost Robustness
-
-M4で、historical broker costが完全でなくても
-
-- plausible scenarios
-- cost stress
-- turnover
-- break-even cost
-
-を評価する。
-
-historical cost再現とcost robustnessを区別する。
-
-## Stage R5 — Robust Historical Validation
-
-M5で
-
-- chronological development / validation / holdout
-- parameter plateau
-- symbol slices
-- year slices
-- rolling results
-- underwater
-- walk-forward
-
-を評価する。
-
-# Academic Track と Practical Track
-
-## Track A — Academic Validation
-
-目的:
-
-> 自作研究系がacademic TSMOMの考え方・reference resultsと整合するか
-
-利用候補:
-
-- `references/2.Time-series-momentum_2012_Journal-of-Financial-Economics.pdf`
-- `references/3.Time Series Momentum Original Paper Data.xlsx`
-- その他 `references/` 配下資料
-
-可能な範囲でacademic-style signal / comparator / reference seriesとのsanity checkを行う。
-
-## Track B — Practical Spot FX / CFD Research
-
-目的:
-
-> 手元のspot/CFD dataと現実的なexecution assumptionでedgeが利用可能か
-
-ここでは
-
-- broker daily bars
-- next-open execution
-- cost scenarios
-- actual swapがあればfinancing
-
-を使う。
-
-Track AとTrack Bの結果を同じ「論文再現」というラベルで混ぜない。
-
-# Holdout Policy
-
-## Research development
-
-複数lookbackや複数symbolのperformance比較を開始する前に、historical dataを少なくとも
+**M1でhistorical performance / predictabilityを見る前に**、
 
 ```text
 development
@@ -175,56 +43,151 @@ validation
 final holdout
 ```
 
-へchronologicalに分離する。
+の期間とsymbol universeを固定します。
 
-## Final holdout
+この順序は必須です。
 
-final holdoutの期間または決定ruleは、本格的なparameter比較を始める前に固定する。
+## M1 — Academic Hypothesis Check
 
-final holdoutを見た後に
+原則development setで研究します。
+
+見るもの:
+
+```text
+past 12m return -> next 1m return
+```
+
+commission / spread / swapは不要。
+
+### Statistical uncertainty
+
+IID前提のnaive t-valueだけで結論しません。
+
+最低限:
+
+- effect size
+- confidence interval
+- sample size
+- symbol別結果
+- pooled結果
+- serial dependenceを考慮したuncertainty
+
+を報告します。
+
+default inferenceは `docs/07_academic_validation_spec.md` に固定します。
+
+## M2 — Academic-Style Comparator
+
+monthly decision / 12 calendar-month formation / 1-month holdingを実装し、
+M0 daily ruleとの差を比較します。
+
+## M3 — Multi-Symbol
+
+common ruleを複数symbolへ適用。
+
+単一市場依存を確認。
+
+## M4 — Portfolio
+
+diversificationとequal-notional aggregationを評価。
+
+## M5 — Risk Scaling
+
+unscaledとvolatility-scaledを分離。
+
+## M6 — Cost Robustness
+
+scenario / turnover / break-even cost。
+
+historical cost replicationとcost robustnessを区別。
+
+## M7 — Robust Historical Validation
+
+ここで、
+
+- validation
+- parameter plateau
+- year / symbol slices
+- rolling results
+- walk-forward
+- cost stress
+
+を行い、**最後にfinal holdoutを一度だけ評価**します。
+
+final holdoutを見て仕様変更した場合、それはfinal holdoutではなくなります。
+
+---
+
+# 2. Holdout Usage Policy
+
+## Development
+
+M1〜M6の設計・debug・explorationに使用可能。
+
+## Validation
+
+事前に固定したmajor designの確認に使用。
+
+validation結果を見て頻繁にruleを変更し続けない。
+
+## Final Holdout
+
+M7まで原則見ない。
+
+final holdoutを開いた後は、
 
 - lookback
+- symbol universe
 - filter
-- execution rule
-- symbol selection
+- execution
+- cost assumptionの都合のよい変更
 
-を変更した場合、そのdatasetはfinal holdoutではなくなる。
+を行って同じholdoutを再評価しません。
 
-# Causality Validation
+---
 
-ある時点 `T` より後のprice dataを意図的に変更しても、
+# 3. Causality Mutation
+
+時点 `T` より後のOHLCを変更しても、
 
 ```text
 signal[t]
 target_position[t]
+executed_position[t]
 ```
 
 for `t <= T`
 
-が変化してはならない。
+が変化してはなりません。
 
-future data変更によって過去signalが変化した場合、lookaheadまたは非因果的なdata transformationが存在する。
+---
 
-# 禁止事項
+# 4. 禁止事項
 
+- M1前にfinal holdoutを覗く
 - holdoutを見てparameter変更
-- symbolごとのlookback最適化をbaseline採用
-- 一点だけ良いparameterを採用
+- symbolごとのlookback optimumをbaseline採用
+- isolated optimumを採用
 - filterを結果を見ながら追加し続ける
-- M0の利益だけをTSMOM存在証拠とみなす
-- volatility scaling改善をsignal alphaと混同する
+- M0利益だけをTSMOM evidenceとする
+- spot analogueをMOP完全再現と呼ぶ
+- vol scaling改善をsignal alphaと呼ぶ
 - incomplete cost modelをFull broker netと呼ぶ
 
-# 推奨成果物
+---
 
-- R0 prediction tables / regressions
-- M0 vs R1 comparator
-- parameter x symbol matrix
-- parameter x year matrix
+# 5. 推奨成果物
+
+- M0 golden fixture report
+- M1 prediction tables / regressions
+- M2 M0-vs-monthly comparator
+- parameter x symbol
+- parameter x year
 - portfolio equity
-- rolling Sharpe / return
-- underwater curve
+- rolling return / Sharpe
+- underwater
 - turnover / holding period
 - cost sensitivity
 - break-even cost
 - Result Level metadata
+- final holdout report
