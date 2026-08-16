@@ -1,7 +1,7 @@
 # M0 — Engine Correctness
 
 ## Status
-Ready for implementation.
+Ready for implementation. M0の実historical performanceは、下記のcorrectness gateとTrack B freeze後にのみ生成する。
 
 ## 目的
 Single-symbol Daily TSMOM baselineを、lookaheadやaccounting ambiguityなしに正しく実装する。
@@ -95,13 +95,17 @@ M0の合否はprofitabilityではなく **engine correctness** で判定する�
 - terminal handling follows documented policy
 
 ## 次工程へ進む前の必須作業
-Track BについてM1 historical resultを見る前に以下をfreezeする。
+golden fixture / synthetic data / unit testsでengine correctnessを確定した後、かつ実historical
+performanceを生成する前に、Track Bについて以下をfreezeする。
 
 - development period
 - validation period
 - final holdout period
 - symbol universe
 - data source / timezone / daily boundary
+
+freeze前の実データ利用はschema/timestamp等のstructural validationに限定し、performanceやpredictive
+resultを見ない。freeze後に初めてhistorical gross resultを生成する。
 
 Track Aのpublished replication sampleは上記holdoutと分離する。
 

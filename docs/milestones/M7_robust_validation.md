@@ -1,8 +1,9 @@
 # M7 — Robust Historical Validation + Challenge Benchmarks
 
 ## Status
-Framework defined. Exact Track B split dates and validation rules must already be frozen before M1.
-TSH exact reference convention and final go/no-go rules must be fixed before M7 results are opened.
+Framework defined. Exact Track B split dates and validation rules must already be frozen before any
+historical Track B performance is generated. Huang bootstrap contract is frozen before M1C implementation,
+and TSH exact reference convention is frozen before M3; neither is deferred to M7.
 
 ## 目的
 事前固定したstrategyがparameter / symbol / year / regime / challenge benchmark / practical holdoutに対してrobustか確認する。

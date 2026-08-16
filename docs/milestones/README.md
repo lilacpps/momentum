@@ -6,13 +6,13 @@
 | Milestone | File | Status |
 |---|---|---|
 | M0 | `M0_engine_correctness.md` | Ready |
-| M1 | `M1_academic_hypothesis.md` | Ready after Track B split freeze; reference bootstrap algorithm lock required during implementation |
+| M1 | `M1_academic_hypothesis.md` | M1A ready after Track B split/universe freeze; M1B after eligible underlying; M1C after Huang contract freeze |
 | M2 | `M2_academic_comparator.md` | Ready after M1 |
-| M3 | `M3_multi_symbol.md` | High-level ready; TSH exact convention must be locked before challenge use |
+| M3 | `M3_multi_symbol.md` | High-level ready after TSH exact historical-mean contract freeze before M3 |
 | M4 | `M4_portfolio.md` | Needs final alignment rules |
-| M5 | `M5_volatility_scaling.md` | MOP reference mode specified; practical mode needs final caps/targets |
+| M5 | `M5_volatility_scaling.md` | MOP reference EWMA contract in `docs/07`; practical mode remains separate |
 | M6 | `M6_cost_financing.md` | Core contract ready |
-| M7 | `M7_robust_validation.md` | Needs fixed experiment / TSH / go-no-go rules |
+| M7 | `M7_robust_validation.md` | Needs fixed experiment / go-no-go rules; TSH contract is frozen before M3 |
 | M8 | `M8_4h.md` | Future / intentionally incomplete |
 | M9 | `M9_1h.md` | Future / intentionally incomplete |
 

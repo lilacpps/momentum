@@ -79,14 +79,16 @@ Track Aでは、
 - cost scenarios
 - financing dataがあればbroker-net評価
 
-Track BではM0完了後、historical resultsを見る前に
+Track Bでは、M0 implementation後にgolden fixture / synthetic data / unit testsでengine correctnessを確定し、
+実historical performanceを一件も見る前に
 
 - development
 - validation
 - final holdout
 - symbol universe
 
-をfreezeします。
+をfreezeします。freeze前の実データ利用はschema/timestamp等のstructural validationに限り、
+performance / PnL / predictive resultは見ません。freeze後に初めてhistorical gross resultを生成します。
 final holdoutはM7まで原則見ません。
 
 Track AとTrack Bを「論文再現」という同じラベルで混ぜません。
@@ -103,9 +105,10 @@ reference comparatorでは最低限、以下を再現対象として固定しま
 - past 12-month return sign
 - 1-month holding
 - futures / forward excess-return dataを利用できる場合はそれを優先
-- ex-ante volatility estimateはlagged daily returnsのEWMA系
+- ex-ante volatility estimateはlagged daily returnsのEWMA系（数式・初期化・欠損・availabilityは`docs/07_academic_validation_spec.md` §3.2がauthoritative）
+- `w_i=(1-delta)delta^i`
+- `delta/(1-delta)=60`, `delta=60/61`
 - annualization = 261
-- EWMA weight center-of-mass = 60 days
 - information lag: `sigma[t-1]` をtime-t returnへ適用
 - per-instrument ex-ante annualized target volatility = 40%
 - position magnitude = `0.40 / sigma[t-1]`
@@ -129,6 +132,16 @@ Practical Trackのtarget volatilityは別実験として扱います。
 
 TSHのhistorical-mean definitionは `references/7.Time-series momentum_ Is it there_.pdf` の式・sample conventionを実装前に固定し、
 論文仕様とcausal expanding-history analogueが異なる場合は**別出力**にします。
+Huang bootstrapはchallenge module開始前にpaperからcontractをfreezeし、その後に実装します。
+
+### M1 workstream status
+
+- M1A Practical Predictability: `Ready after Track B split / universe freeze`
+- M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
+- M1C Huang Statistical Challenge: `Ready after Huang methodology contract freeze`
+
+AQR factor-only workbookはM1Bのunderlyingとはみなしません。M1Bがdata unavailable / pendingでも、
+M1AとAQR factor sanity checkは継続します。
 
 ---
 
@@ -181,5 +194,5 @@ M9  1h Momentum
 M0の仕様は変更していません。
 **M0は現時点で実装開始可能です。**
 
-M1開始前にTrack Bのsplit/universe freezeを行い、
-M1ではreference comparator / challenge inferenceを含む更新版contractに従います。
+M1開始前には、Track B freezeに加えてHuang bootstrap contractをfreezeします。TSH exact historical-mean
+contractはM3開始前にfreezeし、M3/M4/M7で再利用します。

@@ -1,8 +1,7 @@
 # M1 — Academic Hypothesis + Reference Statistical Validation
 
 ## Status
-Ready after Track B split/universe freeze.
-Reference bootstrap algorithm details must be locked from `references/7.Time-series momentum_ Is it there_.pdf` while implementing the challenge module.
+Workstream別。M1Aは `Ready after Track B split / universe freeze`、M1Bは `Ready only after eligible reference underlying data is identified`、M1Cは `Ready after Huang methodology contract freeze`。
 
 ## 目的
 strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのregression evidenceとHuang et al.の反証を同じresearch stageで確認する。
@@ -19,8 +18,10 @@ strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのre
 M0完了済み。
 Track BについてM1結果を見る前にdevelopment / validation / final holdout / symbol universeをfreeze済み。
 Track A published sampleはreplication sampleとして別管理。
+M1AはAcademic underlying dataなしでも実行可能。AQR factor-only workbookはM1Bのunderlyingとはみなさない。
+M1B data unavailable / pendingでもM1AとAQR sanity checkは停止しない。
 
-## Workstream A — Practical Track
+## Workstream A — M1A Practical Predictability
 
 ```text
 P[M] = month M の最後のvalid Daily Close
@@ -36,7 +37,7 @@ Primary:
 - pooled / cross-market effect
 - HAC / clustered uncertainty
 
-## Workstream B — MOP Regression Comparator
+## Workstream B — M1B MOP Regression Comparator
 
 - excess-return dataを使える場合は優先
 - ex-ante vol standardization
@@ -48,7 +49,7 @@ Primary:
 - monthly calendar-time clustering
 - focused 12m cumulative -> next1m comparatorも別表
 
-## Workstream C — Huang Challenge
+## Workstream C — M1C Huang Challenge
 
 - asset-by-asset regression
 - pooled regression
@@ -57,7 +58,8 @@ Primary:
 - parametric wild bootstrap
 - nonparametric pairs bootstrap
 
-bootstrap algorithmのresidual / null / resampling unitは`references/7.Time-series momentum_ Is it there_.pdf` から固定し、fixture testを作る。
+challenge module開始前に、`docs/07_academic_validation_spec.md`のHuang methodology contractをfreezeし、
+その後に実装してfixture testを作る。
 
 ## Workstream D — AQR Reference Sanity
 
@@ -107,6 +109,6 @@ M1開始前:
 - Track B symbol universe
 - Academic Trackで利用可能なdata source
 
-implementation中・resultsを見る前:
-- Huang bootstrap exact algorithm details from reference paper
-- number of bootstrap replications（compute budgetと精度のtrade-offを事前固定）
+M1C開始前:
+- Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T / statistic / p-value / missing）
+- number of bootstrap replications（paper-explicit 1,000）とseed policy

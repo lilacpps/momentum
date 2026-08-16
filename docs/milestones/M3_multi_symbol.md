@@ -30,7 +30,8 @@ TSH challengeで必要になるsymbol-level monthly historiesも再利用可能�
 - monthly history export usable by TSH comparator
 
 ## TSH preparation
-TSHのexact historical-mean conventionは`references/7.Time-series momentum_ Is it there_.pdf` から固定してから有効化する。
+M3開始前に、`docs/07_academic_validation_spec.md`のTSH exact historical-mean contractをfreezeする。
+paper-explicitな定義とimplementation conventionを分け、M3/M4/M7で同一contractを再利用する。
 
 paper replication conventionとcausal analogueが異なる場合は、
 - `TSH_reference_replication`
@@ -66,4 +67,4 @@ paper replication conventionとcausal analogueが異なる場合は、
 ## 人間が決める未決事項
 M1前にfreezeしたsymbol universeを使う。
 追加symbolを入れる場合は新しいexperimentとして扱う。
-TSH exact conventionはchallenge実装前にreferenceから固定する。
+TSH exact conventionはM3開始前にreferenceから固定する。

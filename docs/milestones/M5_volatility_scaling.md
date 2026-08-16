@@ -34,11 +34,10 @@ directional signalを変えずposition sizingのみ変えることでrisk scalin
 - Academic Trackではfutures / forward excess returnを使える場合は優先
 
 ## Ex-ante volatility
-- lagged daily returnsのEWMA variance
-- annualization scalar = 261
-- exponential-weight center-of-mass = 60 days
-- future data禁止
-- time-t return / sizingには `sigma[t-1]` を使用
+詳細なauthoritative formulaは `docs/07_academic_validation_spec.md` §3.2 に従う。
+`w_i=(1-delta)delta^i`、`delta/(1-delta)=60`、`delta=60/61`、annualization=261、
+lagged mean/variance、`sigma[t-1]`、recursive initialization、60-valid-return availability、
+missing/zero/near-zero handlingを同文書で固定する。
 
 ## Position magnitude
 

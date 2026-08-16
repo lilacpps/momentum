@@ -24,7 +24,9 @@ causal daily engineを正しく実装する。
 profitability gating / multi-symbol / portfolio / vol scaling / costs / optimization。
 
 ### Gate
-M0完了直後、Track BのM1結果を見る前にhistorical splitとsymbol universeをfreezeする。
+M0 implementation後、golden fixture / synthetic data / unit testsでengine correctnessを確定する。
+その後、実historical performanceを生成する前にTrack Bのdevelopment / validation / final holdout /
+symbol universeをfreezeする。freeze前の実データ利用はstructural validationだけに限定する。
 Track Aのpublished replication sampleは別管理。
 
 ---
@@ -61,6 +63,9 @@ strategy engineとは別にpredictabilityを直接確認し、MOPのregression m
 - fixed-effect sensitivity
 - wild bootstrap
 - pairs bootstrap
+
+M1C challenge module開始前に、`docs/07_academic_validation_spec.md`のHuang bootstrap contractをfreezeする。
+paper-explicitとimplementation conventionを分離し、freeze後に実装する。
 
 ### 成果
 
@@ -109,6 +114,8 @@ M0と同じdaily ruleを複数symbolへ独立適用。
 - symbol-specific tuningなし
 - TSH comparatorに必要なsymbol-level monthly historyを供給可能にする
 
+M3開始前にTSH exact historical-mean contractをfreezeし、M3/M4/M7で同一definitionを再利用する。
+
 ---
 
 ## M4 — Portfolio Aggregation
@@ -141,10 +148,12 @@ M0と同じdaily ruleを複数symbolへ独立適用。
 
 ### MOP-compatible fixed reference contract
 
-- EWMA lagged daily variance
+- `docs/07_academic_validation_spec.md` §3.2のauthoritative EWMA formula
+- weights `w_i=(1-delta)delta^i`
+- `delta/(1-delta)=60`, `delta=60/61`
 - annualization = 261
-- center-of-mass = 60 days
 - `sigma[t-1]` information lag
+- initialization / minimum history / missing / zero-volatility rulesは同§のimplementation convention
 - per-instrument target annualized volatility = 40%
 - `position magnitude = 0.40 / sigma[t-1]`
 - available instrumentsをequal weight

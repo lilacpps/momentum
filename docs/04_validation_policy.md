@@ -34,9 +34,22 @@ profitabilityではなくcorrectnessを判定。
 
 M0がnegativeでもcorrectなら完了。
 
-## ★ M0完了直後: Track B Split Lock
+## ★ M0 correctness後、実historical performance前: Track B Split Lock
 
-**Practical TrackでM1 historical performance / predictabilityを見る前に**、
+順序は固定します。
+
+```text
+M0 implementation
+-> golden fixture / synthetic data / unit tests
+-> engine correctness確定
+-> Track B development / validation / final holdout / symbol universe freeze
+-> 実historical dataで初めてgross performanceを生成
+-> M1
+```
+
+**split freeze前にPractical Trackのstrategy performance / predictive resultを見てはいけません。**
+schema、timestamp、ordering、missingness等のstructural validationは可能ですが、performance / PnL /
+predictive metricは不可とします。
 
 ```text
 development
@@ -50,6 +63,14 @@ symbol universe
 Track Aのpublished replication sampleは既知のreference sampleなので、このfinal holdoutには含めません。
 
 ## M1 — Academic Hypothesis + Statistical Challenge
+
+M1はworkstream別にstatusを持つ。
+
+- M1A Practical Predictability: `Ready after Track B split / universe freeze`
+- M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
+- M1C Huang Statistical Challenge: `Ready after Huang methodology contract freeze`
+
+M1Bのunderlyingが無い場合もM1AとAQR factor sanity checkは継続し、M1Bだけを data unavailable / pending とする。
 
 ### Practical primary
 
@@ -86,7 +107,8 @@ M2はunscaledなので、MOP representative factorのcomplete strategy comparato
 common ruleを複数symbolへ適用。
 単一市場依存を確認。
 
-TSH comparatorのsymbol-level plumbingを追加可能にしますが、definitionは`references/7.Time-series momentum_ Is it there_.pdf` から固定してから使用します。
+M3開始前にTSH exact historical-mean contractを`docs/07_academic_validation_spec.md`でfreezeし、
+M3/M4/M7で同一definitionを再利用します。
 
 ## M4 — Portfolio
 

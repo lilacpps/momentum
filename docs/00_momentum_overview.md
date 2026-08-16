@@ -188,13 +188,15 @@ M5で、
 
 MOP-compatible comparatorでは、
 
-- lagged daily returnsによるEWMA ex-ante vol
+- `docs/07_academic_validation_spec.md` §3.2のauthoritative EWMA formula
+- weights `w_i=(1-delta)delta^i`
+- `delta/(1-delta)=60`, `delta=60/61`
 - annualization 261
-- center-of-mass 60 days
 - `sigma[t-1]` を使用
 - asset target annualized vol 40%
 
-をreference contractとします。
+をreference contractとします。初期化、minimum history、missing、zero/near-zero、cap/floorは
+`docs/07_academic_validation_spec.md` §3.2の区分に従います。
 
 vol scalingでSharpeが上がっても、それをsignal predictabilityが強くなったとは表現しません。
 

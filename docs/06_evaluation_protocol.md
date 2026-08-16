@@ -188,12 +188,14 @@ current swapの過去一律適用は原則避けます。
 - golden tests
 - causality
 - accounting
-- Track B split/universe freeze
+- engine correctness確定後のTrack B split/universe freeze
+- freeze前はstructural validationのみ、freeze後に初めてhistorical gross performance
 
 ## Gate M1
+- M1A Practical: Track B split/universe freeze後
+- M1B MOP comparator: eligible reference underlying data identified
+- M1C bootstrap challenge: Huang contract freeze後
 - Academic / Practical tracks separated
-- MOP comparator
-- bootstrap challenge
 - uncertainty
 
 ## Gate M2
@@ -202,6 +204,7 @@ current swapの過去一律適用は原則避けます。
 ## Gate M3/M4
 - symbol横断性
 - diversification
+- M3開始前にTSH exact historical-mean contractをfreeze済み
 
 ## Gate M5
 - unscaledで何が残るか

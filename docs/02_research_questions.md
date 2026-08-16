@@ -21,7 +21,11 @@ M0のdaily PnLだけを答えにしない。
 
 ## RQ1: Academic dataとspot/CFD analogueはどう違うか
 
-M1を2 trackに分ける。
+M1を少なくとも次の3 workstreamに分ける。
+
+- M1A Practical Predictability: Track B split / universe freeze後に実行
+- M1B MOP Regression Comparator: eligible reference underlying data確認後に実行
+- M1C Huang Statistical Challenge: methodology contract freeze後に実行
 
 ### Academic Track
 
@@ -164,7 +168,8 @@ naive pooled t-statだけを結論にしない。
 
 ## RQ14: TSMのprofitはpredictabilityなしのTSHより本当に強いか
 
-M3〜M7で、Huang et al.のTime-Series History (TSH) comparatorを実装する。
+M3開始前にHuang et al.のTime-Series History (TSH) exact historical-mean contractをfreezeし、
+M3〜M7で同じdefinitionを再利用する。
 
 最低限、
 

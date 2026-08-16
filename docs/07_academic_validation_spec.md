@@ -1,6 +1,8 @@
-# M1 / M2 Academic Validation Specification
+# M1 / M2 / M5 / Challenge Academic Validation Specification
 
-この文書はM1とM2開始前に固定するresearch contractです。
+この文書はM1/M2/M5およびHuang/TSH challengeのnormative research contractです。
+ここにない実装詳細は、原典の仕様として扱わず、実装前に別途
+`implementation convention` として記録します。
 
 ---
 
@@ -17,7 +19,8 @@ MOP等のpublished sampleは結果が既知なので、**replication sample**と
 
 ## 1.2 Track B — Practical Spot/CFD
 
-M0完了後、M1のhistorical resultを見る前に以下をfreezeします。
+M0 implementation、golden fixture / synthetic data / unit tests、engine correctness
+判定を先に完了します。実historical performanceを一件も生成する前に、以下をfreezeします。
 
 - development period
 - validation period
@@ -25,7 +28,25 @@ M0完了後、M1のhistorical resultを見る前に以下をfreezeします。
 - symbol universe
 - data source / timezone / daily boundary
 
+split/universe freeze前に許される実データ利用は、schema、timestamp、ordering、missingness等の
+structural validationだけです。strategy performance、predictive result、PnL、Sharpe等は生成・閲覧しません。
+freeze後に初めてhistorical gross resultを生成します。
+
 final holdoutはM7まで原則見ません。
+
+## 1.3 M1 workstream status
+
+M1は一つのReady gateではなく、次のworkstreamごとに判定します。
+
+| Workstream | 内容 | Status |
+|---|---|---|
+| M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Ready after Track B split / universe freeze |
+| M1B MOP Regression Comparator | eligible futures / forward / excess-return underlying series | Ready only after eligible reference underlying data is identified |
+| M1C Huang Statistical Challenge | exact bootstrap contractをfreeze後に実装 | Ready after Huang methodology contract freeze |
+
+AQR workbookがfactor returnだけの場合、それだけでlag-by-lag instrument regression用のunderlying
+seriesがあるとはみなしません。underlyingが確保できない場合もM1AとAQR factor sanity checkは進め、
+M1Bだけを `data unavailable / pending` と報告します。
 
 ---
 
@@ -96,14 +117,50 @@ MOPのstrategy returnだけでなく、predictability regressionもreference com
 
 ## 3.2 Volatility standardization
 
-MOP-compatible modeではex-ante volatilityを、
+### Authoritative MOP-compatible EWMA contract
 
-- lagged daily returnのexponentially weighted variance
-- annualization scalar = 261
-- exponential-weight center-of-mass = 60 days
-- time-t returnに `sigma[t-1]` を適用
+日次decimal returnを `r_{s,d}`、対象instrumentを`s`とします。原典で明示された重みは
 
-で計算します。
+```text
+w_i = (1 - delta) * delta^i,   i = 0, 1, 2, ...
+delta / (1 - delta) = 60
+delta = 60 / 61
+sum_i w_i = 1
+```
+
+時点`t−1`までで利用可能なlagged daily returnsに対して、
+
+```text
+m[s,t-1]      = sum_{i=0..infinity} w_i * r[s,t-2-i]
+v[s,t-1]      = 261 * sum_{i=0..infinity} w_i * (r[s,t-2-i] - m[s,t-1])^2
+sigma[s,t-1]  = sqrt(v[s,t-1])
+position[s,t] = signal[s,t] * 0.40 / sigma[s,t-1]
+```
+
+をこのprojectのindex contractとします。したがってtime-`t` returnは必ず `sigma[s,t-1]`
+でscaleし、time-`t`以後のreturnはvolatility estimateへ入りません。`261`はvarianceを年率化
+するscalarです。論文はこのEWMA、中心、261、lagged estimateの使用を明示しています。
+
+### Boundary and numerical contract
+
+以下は原典に完全には明示されないため、`implementation convention` です。
+
+- infinite-history EWMAをtruncateせず、recursive stateとして実装する。
+- 初期化はinstrument最初のvalid return `r_0`で `m_0=r_0`, `q_0=r_0^2` とする。
+  以後 `m_k=delta*m_{k-1}+(1-delta)*r_k`、`q_k=delta*q_{k-1}+(1-delta)*r_k^2`、
+  `variance=261*max(q_k-m_k^2, 0)` とする。
+- reference availabilityは、最初のsigmaを出すまで少なくとも60個の連続したvalid daily
+  returnsがあることを要求する。欠損returnは除外・forward-fill・zero-fillせず、連続履歴を
+  途切れさせ、必要な履歴が再び揃うまでinstrumentをunavailableとする。
+- `variance <= 0` はinfinite positionを作らずunavailableとする。near-zero判定は
+  `variance <= max(1e-24, 1e-12 * max(q_k, 1))` とし、このtoleranceは数値安全のための
+  conventionである。
+- NaN、missing、non-finite returnはvalid observationではない。timestamp gap自体は欠損returnと
+  同一視せず、data contractに従ってdaily boundaryの妥当性を別途検証する。
+
+MOP-compatible reference modeにはcap、floor、leverage limitを原則追加しません。安全のため
+  cap/floor付きseriesを作る場合は `MOP_reference` と別名（例 `practical_capped`）にし、
+  reference comparatorの結果へ混ぜません。
 
 future informationはvol estimateに入れません。
 
@@ -192,8 +249,40 @@ report:
 - random seed
 - resampling unit
 
-実装前に `references/7.Time-series momentum_ Is it there_.pdf` のbootstrap algorithmを読み、
-residual construction / null imposition / resampling unitをtestable specへ固定します。
+### Huang methodology contract — freeze before implementation
+
+`M1 challenge module`開始前に `references/7.Time-series momentum_ Is it there_.pdf` を確認し、
+以下をfreezeします。論文で明示される部分と、このprojectが不足部分を埋めるconventionを区別します。
+
+**Paper-explicit**
+
+- null: pooled regressionのtime-series momentum slope `beta = 0`
+- regression: volatility-standardized next return on lagged volatility-standardized return,
+  with an intercept; the focused case is past 12-month -> next 1-month
+- residual: full-sample fitted regression residual
+- parametric wild bootstrap: fitted model plus residual multiplied by an independent
+  Rademacher draw `v in {-1,+1}`, each probability 1/2; the predictor is held fixed
+- nonparametric pairs bootstrap: observed `(standardized dependent, standardized predictor)`
+  pairsを、同時に、replacementありでT pairs resample
+- both methods preserve the observed cross-sectional rows; the paper does not introduce a
+  time-series block or cross-sectional cluster resample in these two contracts
+- test statistic: pooled regression slope t-statistic
+- one-sided research question: positive TSM (`beta > 0`); reported two-sided diagnosticsは補助表
+- 1,000 simulated samples / method
+
+**Implementation convention (paper text aloneで一意でない事項)**
+
+- seedはreplication metadataへ記録する固定整数とし、分析開始前に決める。
+- empirical one-sided p-valueは `mean(t* >= t_obs)`、two-sidedは
+  `mean(abs(t*) >= abs(t_obs))` とし、critical valueはbootstrap statisticの対応する
+  95th/99th percentileとする。
+- missing rowはそのregressionのcomplete-caseとして除外し、各bootstrap replicateで再度
+  欠損を補間しない。sample size Tはfreeze後のcomplete-case数とする。
+- cross-sectional / time dependenceの追加cluster/block処理はHuang primary bootstrapへ
+  勝手に追加しない。感度分析として出す場合は別method名にする。
+
+このcontractを文書化してfreezeした後にだけ実装を開始し、fixtureでnull、residual、Rademacher、
+pairs resampling、statistic、p-valueを検証します。
 
 plain asymptotic t-valueだけをprimary conclusionにしません。
 
@@ -330,7 +419,29 @@ Huang et al.のTime-Series History comparatorを実装します。
 
 > historical sample meanがpositiveならLong、negativeならShort
 
-ただし「historical sample」のwindow / start conventionはpaperのexact specificationを実装前に固定します。
+## 8.1 Freeze gate
+
+M3開始前にpaperを再確認し、TSH exact historical-mean contractをfreezeします。M3/M4/M7は
+同じcontractを再利用し、milestoneごとに再定義しません。
+
+**Paper-explicit core:** TSHはassetのhistorical sample meanがnon-negativeならLong、negative
+ならShortとし、TSMのpast-12-month signalと比較します。原典はこのeconomic definitionを示します。
+
+**Implementation convention frozen before M3 (paper specificationとは別名義):**
+
+- `TSH_reference_replication` のsample startは、freezeしたreference datasetで各instrumentに
+  利用可能な最初のvalid monthly returnとする。`TSH_causal_expanding`も同じstartを使う。
+- historical meanはexpanding mean、時点`t`のsignalは`t-1`までのreturnだけで計算する。
+- signalはmonth-endに決定し、次月first available executionから次のrebalanceまで保持する。
+- historical mean `> 0` はLong、`< 0` はShort、`= 0` はFlatとする。
+- volatility scalingはMOP reference comparatorでは§3.2の`0.40/sigma[t-1]`、TSH単体の
+  unscaled comparatorではequal-notionalとし、両方を別seriesで出す。
+- rebalance cadenceはmonthly、available universeはその時点でsignal・return・volatilityが
+  全てvalidなinstrument、long/short legはposition signで分解する。
+
+この値はpaper本文が一意に指定した仕様ではなく、このprojectの再現可能な
+`implementation convention` です。paperのfull-sample/non-causal conventionを別途採用する場合は、
+必ず`TSH_reference_replication`に限定し、causal seriesと混ぜません。
 
 もしreference paperのreproduction conventionがfull-sample information等を含み、causal trading analogueと異なる場合は、
 
@@ -340,6 +451,15 @@ TSH_causal_expanding
 ```
 
 を別seriesとして出力します。
+
+causal trading strategyとして実行できる定義とpaperのreplication定義が異なる場合、必ず
+
+```text
+TSH_reference_replication
+TSH_causal_expanding
+```
+
+を別seriesにします。
 
 最低比較:
 
