@@ -66,7 +66,7 @@ daily boundary
 
 Track Aのpublished replication sampleは既知のreference sampleなので、このfinal holdoutには含めません。
 
-Track B v1のmachine-readable freeze artifactは`config/research_track_b.yaml`です。
+Track Bのcurrent machine-readable freeze artifactは`config/research_track_b.yaml`です。
 このartifactがTrack Bの具体値のsource of truthであり、本文書はfreeze timing、split assignment、
 warmup、version policyを定義します。
 
@@ -79,6 +79,8 @@ machine-readableまたはversion-controlled artifactとして保存します。a
 development_period
 validation_period
 final_holdout_period
+warmup_data_start
+split_assignment
 symbol_universe
 data_source
 price_type
@@ -92,18 +94,18 @@ notes
 このsectionは、Track Bのfreeze時期、required gate、artifact保存、version policyについてauthoritativeです。
 `data_source` / `price_type` / `timezone` / `daily_bar_boundary`の意味とデータ検証契約は
 `docs/03_data_and_costs.md`、M1のmethodologyは`docs/07_academic_validation_spec.md`を参照します。
-今回、未決の具体値を推測せず、artifactの実体や値は追加しません。将来は
-`config/research_track_b.yaml`等のversion-controlled artifactを利用できます。
+artifactは既に存在し、concrete valuesは`config/research_track_b.yaml`がsource of truthです。
 
 ### Track B freeze artifact version policy
 
-- freeze artifactは分析開始後にin-place変更しません。`freeze_version = v1`の値を後から上書きすることは禁止します。
-- freeze項目を変更する場合は、旧artifactを保持したまま、理由付きの新version（例: `v2`）を作成します。
+- `freeze_version` fieldはinteger conventionです。current valueは`1`で、次versionは`2`のように整数で増分します。
+- freeze artifactは分析開始後にin-place変更しません。`freeze_version: 1`の値を後から上書きすることは禁止します。
+- freeze項目を変更する場合は、旧artifactを保持したまま、理由付きの新version（例: `freeze_version: 2`）を作成します。
 - 新versionには少なくとも`freeze_date`、`freeze_version`、変更理由、変更対象、旧versionとの関係を記録します。
 - 既に開始したanalysisの結果へ新versionを遡及適用せず、各analysisが使用したfreeze versionをmetadataへ記録します。
 - version変更がanalysis sampleや解釈に影響する場合は、旧version結果を破棄・上書きせず、変更理由と再分析範囲を別途記録します。
 
-### Track B v1 split and warmup semantics
+### Track B split and warmup semantics
 
 `split_assignment.basis`は`next_1m_return_outcome_month`です。M1A observationのsplit所属は
 predictor formation monthではなく、next-month returnのoutcome monthで決めます。例えばformation
@@ -116,9 +118,9 @@ warmup observationsはDevelopment / Validation / Final Holdoutの評価sampleに
 とstate initializationだけに利用します。future informationは利用せず、split assignmentは常にoutcome
 monthで決定します。実データの取得対象は`2015-01`から`2026-06`までです。
 
-### Track B v1 universe policy
+### Track B universe policy
 
-`config/research_track_b.yaml`のprimary universeと`secondary_cross_robustness` universeは、freeze v1時点で
+`config/research_track_b.yaml`のprimary universeと`secondary_cross_robustness` universeは、current freeze version時点で
 事前指定された役割です。performance結果を見てprimaryからsymbolを除外したり、secondaryから好調symbolだけを
 追加したり、両universeを入れ替えたりしません。
 
@@ -129,11 +131,140 @@ freeze versionで変更します。
 
 Final HoldoutはM7までpredictive/performance resultを閲覧しません。
 
+### M1A implementation and real-data execution gates
+
+M1A implementation readinessは、valid current Track B freeze artifactが存在し、frozenであることです。
+synthetic fixture / unit test等を使ったM1A code implementationは、real-data structural validationの
+完了を待たずに開始できます。
+
+M1A real-data execution readinessは、current freeze versionに対応するTrack B structural validationが
+`pass`または`pass_with_warning`で完了していることです。これを満たすまで、Track B real historical dataから
+predictive regression、effect-size table、pooled result、Development / Validation resultを生成・閲覧しません。
+Final Holdoutは従来どおりM7まで開きません。
+
+各analysis output / metadataには、使用したinteger `freeze_version`を必ず記録します。
+
+## Track B structural validation contract
+
+Track B structural validationは、些細なtick欠損を理由にsymbolを落とすためではなく、M1A/M2に必要な
+Daily / monthly research seriesを安全かつ決定論的に構築できない重大なdata problemを検出するために行います。
+Exness MT5 tick dataについて、arbitraryなtick completeness thresholdは設けません。
+
+### PASS criteria
+
+各frozen symbolについて、少なくとも次を確認します。
+
+#### A. Coverage
+
+- 取得対象`2015-01`–`2026-06`について、開始月・終了月を含む必要なcalendar-month seriesを構築できる。
+- `2015-01-01 00:00`等の厳密な開始timestamp一致は要求しない。
+- 休日・週末等の通常のmarket closureは欠損扱いしない。
+
+#### B. Timestamp validity
+
+- timestampがparse可能で、raw timestamp timezoneをUTCとして一意に解釈できる。
+- non-finite / malformed timestampは存在しない、または明確に除外・記録できる。
+- chronological processingを決定論的に行える。
+- raw fileが完全にsort済みであることは要求せず、canonical sortを許可する。ただしout-of-orderはdiagnosticへ記録する。
+
+#### C. Bid validity
+
+- OHLC生成に使うBidがnumeric、finite、positiveである。
+- 少数の明らかなmalformed recordは機械的に除外してよいが、除外件数をdiagnosticへ記録する。
+- 少数のmalformed recordだけを理由にsymbol failureとはしない。
+
+#### D. Duplicate / repeated timestamps
+
+- repeated timestampをautomatic failureとはしない。
+- 同一timestampの複数tickは、source orderまたは明示したstable ordering ruleにより決定論的に処理できれば許可する。
+- 完全に同一のduplicate rowの扱いと件数を記録し、duplicateを理由に都合よくprice seriesを書き換えない。
+
+#### E. Daily aggregation determinism
+
+以下のcontractで、同じinputから常に同じDaily OHLCを生成できる。
+
+```text
+raw timestamps: UTC
+boundary timezone: America/New_York
+boundary local time: 17:00
+price: Bid
+```
+
+DST切替はIANA timezone databaseの`America/New_York`で判定し、expected UTC offsetをロジックのauthorityとしない。
+
+#### F. Monthly availability
+
+- 必要なcalendar monthについて`P[M] = last valid Daily Close of calendar month M`を構築できる。
+- 必要calendar monthが丸ごと欠け、past_12m / next_1m observationの構築に重大な影響がある場合はfailure候補とする。
+- 数tick、数時間、単一Daily bar程度の欠損だけを理由にsymbolを自動除外しない。
+
+#### G. Large-gap diagnostics
+
+- market openが期待される期間の不自然な長時間 / 複数営業日のgapはflagする。
+- large gap detectedだけではautomatic failureとしない。
+- Daily OHLCを信頼して構築できない、calendar-month seriesを構築できない、source corruptionを強く示す、または
+  M1A sample definitionに重大な影響がある場合にfailureとする。
+
+### 明示的に採用しないthreshold
+
+primary structural validationでは、次のarbitrary thresholdを要求しません。
+
+- tick completeness `>= 99.9%`
+- missing tick rate `<= 0.1%`
+- 1日あたり最低N ticks
+- 他sourceとの価格差 `<= X bps`
+
+必要な場合は、将来のdata-quality sensitivityとして別methodで定義します。
+
+### Result classification
+
+各symbolのvalidation statusは次の3状態を許可します。
+
+- `pass`: 重大なstructural issueなし。
+- `pass_with_warning`: minor out-of-order、少数malformed rows、short unexplained gap、harmless duplicate rows等はあるが、
+  Daily/monthly research seriesに重大な影響がない。primary/secondary universeに残す。
+- `fail`: M1A/M2用research seriesを信頼して構築できない重大問題。required coverage不足、timestamp corruption、
+  Bid series不成立、Daily aggregation不能、大規模calendar-month欠落、明確なsource corruption等を含む。
+
+### Symbol exclusion rule
+
+`fail`となったsymbolのみfreeze universe変更の候補とします。`pass_with_warning`だけを理由に除外しません。
+除外候補の判定はpredictive result、PnL、Sharpe、symbol-level performanceを見る前に行います。
+変更する場合は既存freeze versionをin-place変更せず、integer `freeze_version: 2`等の新versionを作成し、
+`previous_freeze_version`、`change_reason`、`changed_fields`、`affected_symbols`を記録します。
+performanceが悪いことを理由としたsymbol除外は禁止します。
+
+### Structural validation output contract
+
+validation実装時は、少なくとも次をsymbolごとにreport可能にします。
+
+```text
+symbol
+freeze_version
+requested_start
+requested_end
+first_valid_tick
+last_valid_tick
+timestamp_parse_errors
+nonfinite_or_invalid_bid_rows
+out_of_order_detected
+repeated_timestamp_count
+exact_duplicate_row_count
+suspicious_gap_count
+daily_bar_count
+missing_calendar_months
+validation_status
+warnings
+failure_reasons
+```
+
+このsectionはdocumentation contractのみを定義し、今回validation codeは実装しません。
+
 ## M1 — Academic Hypothesis + Statistical Challenge
 
 M1はworkstream別にstatusを持つ。
 
-- M1A Practical Predictability: `Ready after Track B concrete freeze artifact`
+- M1A implementation: `Ready after valid current Track B freeze artifact`; M1A real-data execution: `Ready after structural validation pass or pass_with_warning`
 - AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`

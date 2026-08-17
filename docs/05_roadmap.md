@@ -69,7 +69,8 @@ strategy engineとは別にpredictabilityを直接確認し、MOPのregression m
 M1C challenge module開始前に、`docs/07_academic_validation_spec.md`のHuang bootstrap contractをfreezeする。
 paper-explicitとimplementation conventionを分離し、freeze後に実装する。
 
-M1Aはvalid Track B concrete freeze artifact後にReady、AQR Reference Sanityはeligible MOP underlying
+M1A implementationはvalid current Track B freeze artifact後にReadyです。M1A real-data executionは
+`docs/04_validation_policy.md`のstructural validation `pass`または`pass_with_warning`後にReadyとなります。AQR Reference Sanityはeligible MOP underlying
 dataとは独立してReadyです。M1Bはeligible reference underlying dataが識別されるまでpendingとし、
 M1C-referenceはHuang contractとeligible reference data、M1C-practical-analogueはHuang contractと
 Track B dataを要求します。M1B/M1CのpendingはM2をblockしません。normative detailは`docs/07`に集約します。

@@ -99,7 +99,7 @@ data source / price type / timezone / daily boundaryの意味とデータ契約�
 performance / PnL / predictive resultは見ません。freeze後に初めてhistorical gross resultを生成します。
 final holdoutはM7まで原則見ません。
 
-Track B v1の具体的freeze valuesは、version-controlled artifact
+Track B current freeze valuesは、version-controlled artifact
 `config/research_track_b.yaml`をsource of truthとします。freeze/split/warmup/version policyは
 `docs/04_validation_policy.md`、data contractは`docs/03_data_and_costs.md`を参照します。
 
@@ -148,7 +148,7 @@ Huang bootstrapはM1C開始前にpaperからcontractをfreezeし、その後に�
 
 ### M1 workstream status
 
-- M1A Practical Predictability: `Ready after valid Track B concrete freeze artifact`
+- M1A implementation: `Ready after valid current Track B freeze artifact`; real-data execution requires structural validation pass
 - AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`

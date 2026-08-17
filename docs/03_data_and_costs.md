@@ -2,7 +2,7 @@
 
 # 1. M0 Data Contract
 
-Track B v1の具体的data contractは`config/research_track_b.yaml`を参照します。
+Track B current freezeの具体的data contractは`config/research_track_b.yaml`を参照します。
 
 M0入力:
 
@@ -57,20 +57,23 @@ Close[t-1] / Close[t-241] - 1
 FX/CFDではbroker/server timezoneによりDaily barが異なるため、同一experiment内ではboundaryを固定します。
 複数sourceを無条件に混ぜません。
 
-Track B v1では、timestamp timezoneとdaily bar boundaryを別概念として扱います。
+Track B frozen contractでは、timestamp timezoneとdaily bar boundaryを別概念として扱います。
 
 ```text
 data_source: exness_mt5_tick
 price_type: bid
 timezone: UTC
 daily_bar_boundary: New York 17:00 close
-winter: 22:00 UTC
-summer: 21:00 UTC
-dst_rule: US_DST
+boundary_timezone: America/New_York
+boundary_local_time: 17:00
+expected_winter_utc: 22:00 UTC
+expected_summer_utc: 21:00 UTC
 ```
 
-OHLCはExness MT5 tick dataのBid ticksから構築します。UTCはtimestampのtimezoneであり、New York
-17:00 closeはdaily aggregationのboundaryです。
+OHLCはExness MT5 tick dataのBid ticksから構築します。UTCはraw timestampのtimezoneであり、
+`America/New_York`の17:00 local timeはdaily aggregationのboundaryです。DST判定はIANA timezone
+databaseの`America/New_York`をauthoritative sourceとし、expected UTC offsetsはsanity metadataのみとします。
+独自の`US_DST`ルールや固定日付テーブルは使用しません。
 
 ## Price type
 
@@ -105,7 +108,7 @@ next_1m_return[M]  = month_end_price[M+1] / month_end_price[M] - 1
 
 これは統計的predictability用であり、tradable next-open PnLとは別です。
 
-Track B v1の取得対象は`2015-01`から`2026-06`です。`2015-01`から`2016-12`はwarmup / pre-development
+Track B frozen contractの取得対象は`2015-01`から`2026-06`です。`2015-01`から`2016-12`はwarmup / pre-development
 historyであり、Development outcome sampleは`2017-01`から開始します。split所属はformation monthではなく
 `next_1m_return` outcome monthで決定します。詳細なfreeze policyは`docs/04_validation_policy.md`、
 具体値は`config/research_track_b.yaml`を参照します。

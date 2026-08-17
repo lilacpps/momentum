@@ -41,15 +41,19 @@ timezone: UTC
 
 daily_bar_boundary:
   convention: new_york_17_close
-  winter_utc: "22:00"
-  summer_utc: "21:00"
-  dst_rule: US_DST
+  boundary_timezone: America/New_York
+  boundary_local_time: "17:00"
+  expected_winter_utc: "22:00"
+  expected_summer_utc: "21:00"
 
 previous_freeze_version: null
 status: frozen
 
 notes: >-
   Source is Exness MT5 tick data. OHLC is constructed from Bid ticks.
+  Raw tick timestamps are UTC. Daily boundary uses the IANA timezone
+  America/New_York at local time 17:00; expected UTC offsets are sanity
+  metadata only and are not the DST authority.
   The warmup period is used only for predictor formation and state
   initialization and is excluded from Development, Validation, and Final
   Holdout evaluation samples. The primary and secondary universes are

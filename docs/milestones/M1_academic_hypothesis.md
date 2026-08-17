@@ -1,7 +1,8 @@
 # M1 — Academic Hypothesis + Reference Statistical Validation
 
 ## Status
-Workstream別。M1Aは `Ready after valid Track B concrete freeze artifact`、AQR Reference Sanityは
+Workstream別。M1A implementationは `Ready after valid current Track B freeze artifact`、M1A real-data executionは
+`Ready after current freeze version structural validation pass or pass_with_warning`、AQR Reference Sanityは
 `Ready independently of eligible MOP underlying data`、M1Bは `Ready only after eligible reference underlying data is identified`、
 M1C-Huang-referenceは `Ready after Huang methodology contract freeze and eligible reference underlying data`、
 M1C-Huang-practical-analogueは `Ready after Huang methodology contract freeze and Track B data`。
@@ -132,7 +133,7 @@ raw underlying seriesを仮定しない。
 
 ### Workstream completion and unblock rule
 
-- M1A complete: Practical predictability tables, diagnostics, and inference are complete after the valid Track B concrete freeze artifact.
+- M1A complete: Practical predictability tables, diagnostics, and inference are complete after the current freeze version's structural validation is `pass` or `pass_with_warning` and real-data execution is complete.
 - M1B complete: eligible reference underlying data is available and the MOP comparator is executed; otherwise `data unavailable / pending`.
 - M1C-Huang-reference complete: Huang contract is frozen and eligible reference underlying data is available; otherwise `data unavailable / pending`.
 - M1C-Huang-practical-analogue complete: the same frozen challenge contract is executed on Track B data and labeled as an analogue, not a Huang replication.
@@ -176,7 +177,7 @@ M1全体がcompleteでなくても、M1AがcompleteならM2をunblockする。M1
 ## Human decisions still required
 
 M1A開始前:
-- Track B v1 freeze artifact is present and unchanged
+- a valid current Track B freeze artifact is present and frozen
 
 M1C開始前:
 - Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T_i convention /
