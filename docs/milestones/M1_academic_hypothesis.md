@@ -1,14 +1,13 @@
 # M1 — Academic Hypothesis + Reference Statistical Validation
 
 ## Status
-Workstream別。M1A implementationは `Ready after valid current Track B freeze artifact`、M1A real-data executionは
-`Ready after current freeze version structural validation pass or pass_with_warning`、AQR Reference Sanityは
-`Ready independently of eligible MOP underlying data`、M1Bは `Ready only after eligible reference underlying data is identified`、
-M1C-Huang-referenceは `Ready after Huang methodology contract freeze and eligible reference underlying data`、
-M1C-Huang-practical-analogueは `Ready after Huang methodology contract freeze and Track B data`。
-statusは`not_ready`、`ready`、`in_progress`、`complete`、`data_unavailable_pending`をworkstream単位で
-保持し、M1全体を単一booleanで扱わない。
-
+M1A implementation: `complete`.
+M1A real-data execution: `pending structural validation`.
+AQR Reference Sanity: `ready independently of eligible MOP underlying data`.
+M1B: `data_unavailable_pending` until eligible reference underlying data is identified.
+M1C-Huang-reference: `data_unavailable_pending` until the Huang contract is frozen and eligible reference underlying data is identified.
+M1C-Huang-practical-analogue: `not_ready` until the Huang contract is frozen and Track B data is available.
+Statuses remain workstream-specific; M1 is not represented by one boolean.
 ## 目的
 strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのregression evidenceとHuang et al.の反証を同じresearch stageで確認する。
 
@@ -179,9 +178,6 @@ M1全体がcompleteでなくても、M1AがcompleteならM2をunblockする。M1
 - [ ] Annualization factor and Sharpe convention recorded
 
 ## Human decisions still required
-
-M1A開始前:
-- a valid current Track B freeze artifact is present and frozen
 
 M1C開始前:
 - Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T_i convention /

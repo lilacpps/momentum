@@ -310,6 +310,11 @@ def test_rank_deficient_bootstrap_returns_unavailable_row(track_b_config):
     assert len(rows) == 2
     assert set(rows["inference_status"]) == {"unavailable"}
     assert set(rows["inference_unavailable_reason"]) == {"rank_deficient_design"}
+    assert set(rows["bootstrap_executed"]) == {False}
+    assert set(rows["attempted_draws"]) == {0}
+    assert set(rows["successful_draws"]) == {0}
+    assert set(rows["failed_draws"]) == {0}
+    assert set(rows["skipped_draws"]) == {5000}
 
 
 def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
@@ -348,10 +353,32 @@ def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
     assert set(with_secondary.regression_results["universe_role"]) == {
         "primary", "secondary_cross_robustness",
     }
+    primary_diagnostics = with_secondary.diagnostics["diagnostics_by_universe_role"]["primary"]
+    secondary_diagnostics = with_secondary.diagnostics["diagnostics_by_universe_role"]["secondary_cross_robustness"]
+    assert primary_diagnostics["observation_count"] > 0
+    assert secondary_diagnostics["observation_count"] > 0
+    assert with_secondary.diagnostics["analysis_observation_count"] == (
+        primary_diagnostics["observation_count"] + secondary_diagnostics["observation_count"]
+    )
     assert not ((with_secondary.regression_results["result_role"] == "primary")
                 & (with_secondary.regression_results["universe_role"] == "secondary_cross_robustness")).any()
     assert not ((with_secondary.regression_results["symbol"] == "__pooled__")
                 & (with_secondary.regression_results["universe_role"] == "secondary_cross_robustness")).any()
+
+
+def test_eligible_secondary_missing_from_input_fails_fast(track_b_config):
+    data = _daily_fixture(start="2015-01", end="2024-01", symbols=track_b_config.primary_symbols)
+    statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
+    statuses.update({symbol: "fail" for symbol in track_b_config.secondary_symbols})
+    statuses[track_b_config.secondary_symbols[0]] = "pass"
+    with pytest.raises(TrackBDailyValidationError, match="eligible secondary symbols missing from input"):
+        run_m1a_track_b(
+            data,
+            track_b_config,
+            statuses,
+            track_b_config.freeze_version,
+            include_sensitivity=False,
+        )
 
 
 def test_symbol_hac_is_unavailable_for_calendar_gap(track_b_config):

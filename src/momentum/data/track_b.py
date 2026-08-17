@@ -175,6 +175,15 @@ def _build_monthly_observations(
         "next_1m_return", "sign", "split",
     ])
     analysis = observations[observations["split"].isin(config.analysis_splits)].copy()
+    diagnostics_by_universe_role = {}
+    for role in ("primary", "secondary_cross_robustness"):
+        role_analysis = analysis[analysis["universe_role"] == role]
+        diagnostics_by_universe_role[role] = {
+            "observation_count": int(len(role_analysis)),
+            "positive": int((role_analysis["sign"] > 0).sum()),
+            "negative": int((role_analysis["sign"] < 0).sum()),
+            "zero": int((role_analysis["sign"] == 0).sum()),
+        }
     diagnostics = {
         "available_calendar_months": available_by_symbol,
         "missing_calendar_months": missing_by_symbol,
@@ -190,6 +199,7 @@ def _build_monthly_observations(
             str(key): int(value) for key, value in analysis["symbol"].value_counts().items()
         },
         "analysis_observation_count": int(len(analysis)),
+        "diagnostics_by_universe_role": diagnostics_by_universe_role,
         "freeze_version": config.freeze_version,
     }
     return MonthlyObservationResult(observations=observations, diagnostics=diagnostics)
@@ -228,6 +238,11 @@ def _build_track_b_monthly_observations(
     missing_primary = sorted(set(config.primary_symbols) - selected_symbols)
     if missing_primary:
         raise TrackBDailyValidationError(f"missing frozen primary symbols: {missing_primary}")
+    missing_eligible_secondary = sorted(set(eligible_secondary) - selected_symbols)
+    if missing_eligible_secondary:
+        raise TrackBDailyValidationError(
+            f"eligible secondary symbols missing from input: {missing_eligible_secondary}"
+        )
     return _build_monthly_observations(
         selected,
         config,

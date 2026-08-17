@@ -315,6 +315,9 @@ def moving_block_bootstrap(
         "interval_method": "percentile",
         "successful_draws": successful,
         "failed_draws": failed,
+        "bootstrap_executed": True,
+        "attempted_draws": iterations,
+        "skipped_draws": 0,
     }
     return BootstrapSummary(
         standard_error=float(values.std(ddof=1)) if successful > 1 else float("nan"),

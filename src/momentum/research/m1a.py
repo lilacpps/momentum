@@ -361,8 +361,11 @@ def _bootstrap_row(config: TrackBConfig, frame: pd.DataFrame, split: str, analys
             "ci_upper": float("nan"),
             "inference_status": "unavailable",
             "inference_unavailable_reason": "rank_deficient_design",
+            "bootstrap_executed": False,
+            "attempted_draws": 0,
             "successful_draws": 0,
-            "failed_draws": 5000,
+            "failed_draws": 0,
+            "skipped_draws": 5000,
         })
         return row
     period = getattr(config, split)
@@ -385,8 +388,11 @@ def _bootstrap_row(config: TrackBConfig, frame: pd.DataFrame, split: str, analys
             "ci_upper": float("nan"),
             "inference_status": "unavailable",
             "inference_unavailable_reason": f"bootstrap_error:{type(exc).__name__}",
+            "bootstrap_executed": True,
+            "attempted_draws": 5000,
             "successful_draws": 0,
             "failed_draws": 5000,
+            "skipped_draws": 0,
         })
         return row
     row.update({

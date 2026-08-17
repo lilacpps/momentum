@@ -15,6 +15,9 @@ the frozen primary universe. Eligible secondary symbols are reported only as
 symbol-level robustness results with `result_role = robustness` and
 `universe_role = secondary_cross_robustness`; no combined secondary pooled
 primary is implied by this contract.
+Diagnostics retain aggregate counts for backward compatibility and additionally
+report `diagnostics_by_universe_role` with observation, positive, negative, and
+zero counts for primary and secondary robustness samples.
 
 For real Track B input, `timestamp` must be timezone-aware UTC and must represent
 the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is
