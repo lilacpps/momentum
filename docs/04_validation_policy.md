@@ -58,6 +58,7 @@ validation period
 final holdout period
 symbol universe
 data source
+price type
 timezone
 daily boundary
 ```
@@ -138,11 +139,19 @@ synthetic fixture / unit test等を使ったM1A code implementationは、real-da
 完了を待たずに開始できます。
 
 M1A real-data execution readinessは、current freeze versionに対応するTrack B structural validationが
-`pass`または`pass_with_warning`で完了していることです。これを満たすまで、Track B real historical dataから
+下記のoverall gateを満たして完了していることです。これを満たすまで、Track B real historical dataから
 predictive regression、effect-size table、pooled result、Development / Validation resultを生成・閲覧しません。
 Final Holdoutは従来どおりM7まで開きません。
 
-各analysis output / metadataには、使用したinteger `freeze_version`を必ず記録します。
+Track B structural validationのoverall gateは、primaryとsecondaryを分けて判定します。
+
+- **Primary gate**: frozen primary 8 symbolsがすべて`pass`または`pass_with_warning`であること。
+  primaryに1 symbolでも`fail`があれば、current freeze versionではM1A primaryのreal-data executionを開始しません。
+- **Secondary robustness gate**: robustness analysisに含めるfrozen secondary symbolが`pass`または`pass_with_warning`であること。
+  secondaryの`fail`はM1A primaryおよびM2をblockしませんが、そのsymbolのsecondary robustness analysisは実行しません。
+
+`fail`を理由にuniverseを変更する場合は、既存freeze versionをin-place変更せず、新しいfreeze versionを作成して
+再validationします。各analysis output / metadataには、使用したinteger `freeze_version`を必ず記録します。
 
 ## Track B structural validation contract
 
