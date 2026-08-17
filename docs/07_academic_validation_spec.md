@@ -147,6 +147,98 @@ M1出力は、少なくとも`track`、`workstream`、`analysis_name`、`symbol`
 `predictor_definition`、`dependent_definition`、`inference_method`、`covariance_method`、
 `lag_or_cluster`、`nobs`、`data_source`、`timezone`、`daily_boundary`、`spec_version`の意味を保持します。
 
+### M1A implementation convention — `m1a-practical-v1`
+
+以下はpaper-explicitな仕様ではなく、M1A v1の再現可能なproject implementation conventionです。
+
+#### Daily timestamp and calendar identity
+
+M1AのDaily input timestampは、Track BのNew York 17:00 Daily sessionのnominal close timestampをUTCで表したものとします。
+calendar monthはそのtimestampを`America/New_York`へ変換したlocal dateから決定し、bar-open timestampをmonth identityの判定には使いません。
+timezone-naiveなsynthetic inputは、current Track Bのraw timestamp contractに従いUTCとして扱います。
+
+#### Covariance options
+
+statsmodelsのlibrary defaultに依存せず、次のoptionsを明示的に渡します。confidence levelは`0.95`です。
+
+Symbol-level HAC / Newey-West primary:
+
+```text
+cov_type = HAC
+kernel = bartlett
+maxlags = 12
+use_correction = True
+use_t = True
+confidence_level = 0.95
+```
+
+通常のHACがconsecutive / equally-spaced observationsを前提とするため、outcome monthのcalendar gapをrow圧縮してHAC(12)へ渡しません。
+symbol sampleにgapがある場合、point estimateを保持できてもprimary HAC inferenceはunavailableとし、
+`inference_unavailable_reason = non_consecutive_calendar_months`をmetadataへ記録します。
+
+Pooled calendar-month clustered primary:
+
+```text
+cov_type = cluster
+groups = outcome_month
+use_correction = True
+df_correction = True
+use_t = True
+confidence_level = 0.95
+```
+
+cluster variableはformation monthではなく`outcome_month`です。同一outcome monthの全symbol observationを同一clusterとして扱います。
+
+Two-way clustered sensitivity:
+
+```text
+groups = symbol × outcome_month
+use_correction = True
+df_correction = True
+use_t = True
+confidence_level = 0.95
+result_role = sensitivity
+```
+
+実際に使用したstatsmodels API、library version、covariance kwargsをresult metadataへ記録します。
+
+#### Sign-conditioned effect confidence intervals
+
+sign-conditioned effectのCIは、zero predictor observationsを除いたsample上で、次のpositive-indicator regressionから算出します。
+
+```text
+next_1m_return = alpha + beta * I(past_12m_return > 0) + error
+```
+
+negative meanは`alpha`、positive meanは`alpha + beta`、differenceは`beta`です。
+symbol-levelではHAC(12)、pooledではoutcome-month clustered SEを使います。
+これは`sign(past_12m_return)`のzero rowを保持するsign-predictor regressionとは別analysisです。
+
+#### M1A moving block bootstrap sensitivity
+
+M1A pooled continuous regressionおよびpooled sign-predictor regressionのsensitivityとして、moving block bootstrapを使います。
+これはpaper-explicitなM1A primary methodologyではありません。
+
+```text
+bootstrap_method = moving_block
+bootstrap_unit = calendar_month
+sequence_axis = ordered outcome_month
+block_length_months = 12 calendar-month slots
+bootstrap_replications = 5000
+bootstrap_seed = 20260817
+rng = numpy.Generator(PCG64)
+confidence_level = 0.95
+interval_method = percentile
+result_role = sensitivity
+```
+
+block lengthは12 observed monthsではなく12 calendar-month slotsです。calendar gapを圧縮せず、block内部のcalendar順序を保持します。
+同一outcome monthの全symbol rowを一単位としてreplacementありでresampleし、sampleと同じcalendar-month slot数まで連結してtruncateします。
+missing symbol/monthは補間せず、そのslotにrowがない状態を保ちます。DevelopmentとValidationを跨いでresampleせず、Final HoldoutはM7まで対象外です。
+
+point estimateはoriginal OLS coefficientとし、bootstrap meanへ置き換えません。bootstrap standard errorはsuccessful coefficientのsample SD、
+95% CIは`[2.5%, 97.5%]` percentile intervalです。failed / singular drawは黙って破棄せず、`successful_draws`と`failed_draws`をmetadataへ記録します。
+
 ---
 
 # 3. M1 — MOP Regression Comparator

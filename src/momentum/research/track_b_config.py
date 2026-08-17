@@ -1,0 +1,171 @@
+"""Track B freeze artifact loading and M1A execution gates."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Mapping
+
+import pandas as pd
+import yaml
+
+VALID_STRUCTURAL_STATUSES = frozenset({"pass", "pass_with_warning"})
+REQUIRED_TOP_LEVEL_FIELDS = (
+    "freeze_version", "freeze_date", "warmup_data_start", "development_period",
+    "validation_period", "final_holdout_period", "split_assignment", "symbol_universe",
+    "data_source", "price_type", "timezone", "daily_bar_boundary", "status",
+)
+
+
+class TrackBConfigError(ValueError):
+    """Raised when the current Track B freeze artifact is invalid."""
+
+
+@dataclass(frozen=True)
+class PeriodRange:
+    start: pd.Period
+    end: pd.Period
+
+    def contains(self, month: pd.Period) -> bool:
+        return self.start <= month <= self.end
+
+
+@dataclass(frozen=True)
+class TrackBConfig:
+    path: Path
+    freeze_version: int
+    freeze_date: str
+    warmup_data_start: pd.Period
+    development: PeriodRange
+    validation: PeriodRange
+    final_holdout: PeriodRange
+    split_assignment_basis: str
+    primary_symbols: tuple[str, ...]
+    secondary_symbols: tuple[str, ...]
+    data_source: str
+    price_type: str
+    timezone: str
+    daily_boundary: Mapping[str, Any]
+    status: str
+    raw: Mapping[str, Any]
+
+    @property
+    def boundary_timezone(self) -> str:
+        return str(self.daily_boundary["boundary_timezone"])
+
+    @property
+    def analysis_splits(self) -> tuple[str, str]:
+        return ("development", "validation")
+
+    def split_for_outcome(self, outcome_month: pd.Period) -> str:
+        if self.development.contains(outcome_month):
+            return "development"
+        if self.validation.contains(outcome_month):
+            return "validation"
+        if self.final_holdout.contains(outcome_month):
+            return "final_holdout"
+        if outcome_month < self.development.start:
+            return "warmup"
+        return "outside_frozen_period"
+
+
+def _mapping(value: Any, name: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise TrackBConfigError(f"{name} must be a mapping")
+    return value
+
+
+def _period(value: Any, name: str) -> pd.Period:
+    try:
+        return pd.Period(str(value), freq="M")
+    except Exception as exc:  # pragma: no cover - defensive error translation
+        raise TrackBConfigError(f"{name} must be a YYYY-MM period") from exc
+
+
+def _period_range(value: Any, name: str) -> PeriodRange:
+    mapping = _mapping(value, name)
+    if "start" not in mapping or "end" not in mapping:
+        raise TrackBConfigError(f"{name} requires start and end")
+    result = PeriodRange(_period(mapping["start"], f"{name}.start"), _period(mapping["end"], f"{name}.end"))
+    if result.start > result.end:
+        raise TrackBConfigError(f"{name}.start must not be after end")
+    return result
+
+
+def load_track_b_config(path: str | Path = "config/research_track_b.yaml") -> TrackBConfig:
+    artifact_path = Path(path)
+    if not artifact_path.exists():
+        raise TrackBConfigError(f"Track B artifact does not exist: {artifact_path}")
+    raw = yaml.safe_load(artifact_path.read_text(encoding="utf-8"))
+    raw = _mapping(raw, "artifact")
+    missing = [field for field in REQUIRED_TOP_LEVEL_FIELDS if field not in raw]
+    if missing:
+        raise TrackBConfigError(f"missing required fields: {missing}")
+
+    version = raw["freeze_version"]
+    if isinstance(version, bool) or not isinstance(version, int) or version <= 0:
+        raise TrackBConfigError("freeze_version must be a positive integer")
+    if raw["status"] != "frozen":
+        raise TrackBConfigError("Track B artifact status must be frozen")
+
+    split = _mapping(raw["split_assignment"], "split_assignment")
+    basis = split.get("basis")
+    if basis != "next_1m_return_outcome_month":
+        raise TrackBConfigError("split_assignment.basis must be next_1m_return_outcome_month")
+    universe = _mapping(raw["symbol_universe"], "symbol_universe")
+    primary = tuple(universe.get("primary", ()))
+    secondary = tuple(universe.get("secondary_cross_robustness", ()))
+    if not primary or not secondary or set(primary) & set(secondary):
+        raise TrackBConfigError("primary and secondary symbol universes must be non-empty and disjoint")
+    boundary = _mapping(raw["daily_bar_boundary"], "daily_bar_boundary")
+    for field in ("boundary_timezone", "boundary_local_time"):
+        if field not in boundary:
+            raise TrackBConfigError(f"daily_bar_boundary.{field} is required")
+
+    result = TrackBConfig(
+        path=artifact_path,
+        freeze_version=version,
+        freeze_date=str(raw["freeze_date"]),
+        warmup_data_start=_period(raw["warmup_data_start"], "warmup_data_start"),
+        development=_period_range(raw["development_period"], "development_period"),
+        validation=_period_range(raw["validation_period"], "validation_period"),
+        final_holdout=_period_range(raw["final_holdout_period"], "final_holdout_period"),
+        split_assignment_basis=basis,
+        primary_symbols=primary,
+        secondary_symbols=secondary,
+        data_source=str(raw["data_source"]),
+        price_type=str(raw["price_type"]),
+        timezone=str(raw["timezone"]),
+        daily_boundary=dict(boundary),
+        status=str(raw["status"]),
+        raw=dict(raw),
+    )
+    if result.warmup_data_start > result.development.start:
+        raise TrackBConfigError("warmup_data_start must not be after development start")
+    if result.development.end >= result.validation.start or result.validation.end >= result.final_holdout.start:
+        raise TrackBConfigError("evaluation periods must be non-overlapping and ordered")
+    return result
+
+
+def validate_m1a_real_data_gate(
+    config: TrackBConfig,
+    structural_status_by_symbol: Mapping[str, str],
+    validation_freeze_version: int,
+) -> tuple[str, ...]:
+    """Validate the primary gate and return eligible secondary symbols."""
+    if validation_freeze_version != config.freeze_version:
+        raise TrackBConfigError("structural validation freeze_version does not match current artifact")
+    missing = [symbol for symbol in config.primary_symbols if symbol not in structural_status_by_symbol]
+    if missing:
+        raise TrackBConfigError(f"missing primary structural validation statuses: {missing}")
+    invalid = {
+        symbol: structural_status_by_symbol[symbol]
+        for symbol in config.primary_symbols
+        if structural_status_by_symbol[symbol] not in VALID_STRUCTURAL_STATUSES
+    }
+    if invalid:
+        raise TrackBConfigError(f"primary structural validation gate failed: {invalid}")
+    return tuple(
+        symbol for symbol in config.secondary_symbols
+        if structural_status_by_symbol.get(symbol) in VALID_STRUCTURAL_STATUSES
+    )
