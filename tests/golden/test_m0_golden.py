@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from momentum.backtest.engine import run_m0_backtest
 
@@ -33,6 +34,16 @@ def test_hand_calculated_state_transitions_and_episodes(synthetic_ohlc):
     assert ledger.loc[1, "reversal_from_episode_id"] == 0
 
 
+def test_transition_bar_return_belongs_to_post_transition_position(synthetic_ohlc):
+    bars = run_m0_backtest(synthetic_ohlc).bars
+    # t=242: Long -> Short; Open[242] -> Open[243] belongs to new Short.
+    assert bars.loc[242, "strategy_return"] == pytest.approx(-1 / 243)
+    # t=246: Long -> Flat; the exit bar has no subsequent exposure.
+    assert bars.loc[246, "strategy_return"] == pytest.approx(0.0)
+    # t=248: Short -> Long; Open[248] -> Open[249] belongs to new Long.
+    assert bars.loc[248, "strategy_return"] == pytest.approx(1 / 249)
+
+
 def test_result_is_deterministic(synthetic_ohlc):
     first = run_m0_backtest(synthetic_ohlc)
     second = run_m0_backtest(synthetic_ohlc)
@@ -52,6 +63,23 @@ def test_entry_position_owns_only_open_to_next_open_and_terminal_is_not_liquidat
     assert bars.loc[251, "cumulative_gross_return"] == bars.loc[250, "cumulative_gross_return"]
     assert result.ledger.iloc[-1]["status"] == "open"
     assert pd.isna(result.ledger.iloc[-1]["exit_timestamp"])
+
+
+def test_hand_calculated_strategy_and_cumulative_gross_returns(synthetic_ohlc):
+    bars = run_m0_backtest(synthetic_ohlc).bars
+    expected_cum_241 = (1 + 1 / 242) - 1
+    expected_cum_242 = (1 + 1 / 242) * (1 - 1 / 243) - 1
+    expected_cum_243 = expected_cum_242
+    expected_cum_244 = (1 + expected_cum_243) * (1 + 1 / 245) - 1
+
+    assert bars.loc[241, "strategy_return"] == pytest.approx(1 / 242)
+    assert bars.loc[242, "strategy_return"] == pytest.approx(-1 / 243)
+    assert bars.loc[243, "strategy_return"] == pytest.approx(0.0)
+    assert bars.loc[244, "strategy_return"] == pytest.approx(1 / 245)
+    assert bars.loc[241, "cumulative_gross_return"] == pytest.approx(expected_cum_241)
+    assert bars.loc[242, "cumulative_gross_return"] == pytest.approx(expected_cum_242)
+    assert bars.loc[243, "cumulative_gross_return"] == pytest.approx(expected_cum_243)
+    assert bars.loc[244, "cumulative_gross_return"] == pytest.approx(expected_cum_244)
 
 
 def test_overnight_gap_is_not_attributed_to_new_position(synthetic_ohlc):
