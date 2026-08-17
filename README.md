@@ -86,6 +86,9 @@ Track Bでは、M0 implementation後にgolden fixture / synthetic data / unit te
 - validation
 - final holdout
 - symbol universe
+- data source
+- timezone
+- daily boundary
 
 をfreezeします。freeze前の実データ利用はschema/timestamp等のstructural validationに限り、
 performance / PnL / predictive resultは見ません。freeze後に初めてhistorical gross resultを生成します。
