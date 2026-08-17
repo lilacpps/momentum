@@ -257,15 +257,57 @@ M1Bのregression outputに40% strategy sizingを混ぜず、strategy-level sizin
 
 ## 3.4 Focused 12m -> 1m comparator
 
-Huang challengeとの接続用に、
+MOPのlag-by-lag regressionでは、single-month lagged returnとpast-h-month cumulative returnを別の
+predictor familyとして扱います。forecast originを`t`、dependent returnを次月`t+1`とし、
+volatility standardizationはpaperのTable 8 Panel A/Bのindexingに合わせます。
+
+### Panel A — single-month lagged return
+
+単一の月次returnをlagさせるfamilyは、
 
 ```text
-past 12-month return -> next 1-month return
+y[s,t+1] = r[s,t+1] / sigma[s,t]
+x_A[s,t,h] = r[s,t-h+1] / sigma[s,t-h]
+
+y[s,t+1] = alpha_h + beta_A,h * x_A[s,t,h] + error[s,t+1]
 ```
 
-のpooled specificationも別表で出します。
+これはTable 8 Panel Aの「return lagged h months」に対応します。`x_A`はhか月累積returnではなく、
+単一monthのreturnです。
 
-MOP lag-by-lag regression familyと、この12m cumulative predictor regressionを同一視しません。
+### Panel B — past-h-month cumulative return
+
+過去hか月の累積returnをpredictorにするfamilyは、
+
+```text
+r[s,t-h,t] = product_{j=t-h+1..t} (1 + r[s,j]) - 1
+y[s,t+1] = r[s,t+1] / sigma[s,t]
+x_B[s,t,h] = r[s,t-h,t] / sigma[s,t-1]
+
+y[s,t+1] = alpha_h + beta_B,h * x_B[s,t,h] + error[s,t+1]
+```
+
+とします。`r[s,t-h,t]`は`t-h+1`から`t`までのh個のmonthly returnを累積したreturnであり、
+単一monthの`r[s,t-h+1]`とは別定義です。これはTable 8 Panel Bの「past h-month returns」に
+対応します。
+
+Huang challengeのfocused 12m → 1m specificationはPanel Bの`h=12`、すなわちpast-12-month
+cumulative returnを使います。
+
+```text
+past_12m_return[s,t] = r[s,t-12,t]
+next_1m_return[s,t]  = r[s,t+1]
+
+standardized_next_1m[s,t] = r[s,t+1] / sigma[s,t]
+standardized_past_12m[s,t] = r[s,t-12,t] / sigma[s,t-1]
+```
+
+のpooled specificationを使います。focused caseではsingle-month lagged returnをpast-12-month
+cumulative returnの代替として使用しません。
+
+MOP Panel A single-month lag family、MOP Panel B cumulative-return family、focused Huang 12m→1m
+challengeを同一視しません。原論文Table 8のPanel A/Bはそれぞれ上記のpredictor定義に対応し、
+Panel Bのh=12がfocused challengeです。
 
 ---
 
@@ -363,17 +405,24 @@ primary anchorとし、数式自体をこの文書へ転記します。
 ### Huang reference fixed-effect procedure
 
 `Huang_reference_fixed_effect`はinstrument dummyを単にOLSへ加えるgeneric panel regressionではなく、
-Huang §4.4 Eq. (12)のasset内demeaningをreference procedureとします。M1Cのfocused standardized
-dependent variableとpredictorをそれぞれ`y[s,t] = r[s,t] / sigma[s,t-1]`、
-`x[s,t] = r[s,t-h] / sigma[s,t-h-1]`（focused caseは`h=12`）とし、canonical formは、
+Huang §4.4 Eq. (12)のasset内demeaningをreference procedureとします。Eq. (12)のfocused challenge
+では、dependent variableとpredictorをTable 8 Panel Bの定義に従って、
+`y[s,t+1] = r[s,t+1] / sigma[s,t]`、
+`x_B[s,t,h] = r[s,t-h,t] / sigma[s,t-1]`（focused caseは`h=12`）とします。
+
+Panel Bに対応するdemeaned reference equationは、
 
 ```text
-(y[s,t] - mean_s(y[s]))
-    = beta_FE * (x[s,t] - mean_s(x[s]))
-    + error[s,t]
+(y[s,t+1] - mean_s(y))
+    = beta_FE,B,h * (x_B[s,t,h] - mean_s(x_B))
+    + error[s,t+1]
 ```
 
-です。ここで`mean_s(.)`はasset sのfreeze-period sample meanです。Huang reference procedureでは、
+です。ここで`mean_s(.)`はasset sのfreeze-period sample meanです。
+Panel Aのsingle-month lagged-return fixed-effect sensitivityを出す場合は、同じEq. (12)の形で
+`x_B`を`x_A[s,t,h] = r[s,t-h+1] / sigma[s,t-h]`へ置き換え、
+`beta_FE,A,h`として別method/result labelで報告します。Panel AとPanel Bのfixed-effect resultを
+同じfocused coefficientとして混ぜません。Huang reference procedureでは、
 このdemeaned dataに対してwild bootstrapを行い、pairs bootstrapではdemeaning後の`(x, y)` pairsを
 asset identity/pathごとにreplacementありでresampleします。各assetのpathを生成してからstackする点を
 保持します。instrument dummyを使うgeneric panel fixed-effect sensitivityは

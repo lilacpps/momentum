@@ -91,6 +91,14 @@ notes
 今回、未決の具体値を推測せず、artifactの実体や値は追加しません。将来は
 `config/research_track_b.yaml`等のversion-controlled artifactを利用できます。
 
+### Track B freeze artifact version policy
+
+- freeze artifactは分析開始後にin-place変更しません。`freeze_version = v1`の値を後から上書きすることは禁止します。
+- freeze項目を変更する場合は、旧artifactを保持したまま、理由付きの新version（例: `v2`）を作成します。
+- 新versionには少なくとも`freeze_date`、`freeze_version`、変更理由、変更対象、旧versionとの関係を記録します。
+- 既に開始したanalysisの結果へ新versionを遡及適用せず、各analysisが使用したfreeze versionをmetadataへ記録します。
+- version変更がanalysis sampleや解釈に影響する場合は、旧version結果を破棄・上書きせず、変更理由と再分析範囲を別途記録します。
+
 ## M1 — Academic Hypothesis + Statistical Challenge
 
 M1はworkstream別にstatusを持つ。

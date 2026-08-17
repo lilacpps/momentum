@@ -179,10 +179,12 @@ M1A開始前:
 - Track B development / validation / final holdout periods
 - Track B symbol universe
 - Track B data source / price type / timezone / daily boundary
-- Academic Trackで利用可能なdata source
 
 M1C開始前:
 - Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T_i convention /
   statistic / 97.5th-percentile critical value / missing / fixed-effect equation）
 - paper-explicit bootstrap replications = 1,000
 - implementation seed value and seed policy
+
+M1B開始前:
+- Academic Trackで利用可能なeligible reference underlying data source
