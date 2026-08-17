@@ -193,7 +193,7 @@ current swapの過去一律適用は原則避けます。
 
 ## Gate M1
 - M1A implementation: `docs/04_validation_policy.md`のvalid current Track B freeze artifact後
-- M1A real-data execution: current freeze versionのstructural validation `pass`または`pass_with_warning`後
+- M1A real-data execution: `docs/04_validation_policy.md`で定義するPrimary structural-validation overall gate通過後
 - AQR Reference Sanity: eligible MOP underlying dataとは独立
 - M1B MOP comparator: eligible reference underlying data identified
 - M1C-Huang-reference: Huang contract freeze + eligible reference underlying data
