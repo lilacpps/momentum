@@ -10,6 +10,12 @@ gate itself, filters eligible symbols before monthly construction and diagnostic
 and constructs real-data observations only through the Validation outcome month.
 Final Holdout observations are not constructed or returned by the real-data path.
 
+Each observation carries `universe_role`. Normative primary analyses use only
+the frozen primary universe. Eligible secondary symbols are reported only as
+symbol-level robustness results with `result_role = robustness` and
+`universe_role = secondary_cross_robustness`; no combined secondary pooled
+primary is implied by this contract.
+
 For real Track B input, `timestamp` must be timezone-aware UTC and must represent
 the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is
 accepted only by the private synthetic fixture path. Calendar month identity is
@@ -22,6 +28,9 @@ used directly with the frozen covariance options. For pooled cluster results,
 metadata records `outcome_month_cluster_count`, the expected degrees of freedom
 (`cluster_count - 1`), `statsmodels_df_resid_inference`, and whether those values
 match. OLS `df_resid` is never used as a fallback for clustered inference.
+If `statsmodels_df_resid_inference` exists and does not equal the expected
+cluster-count-minus-one value, the result is `inference_status = unavailable`
+with `inference_unavailable_reason = cluster_df_mismatch`.
 
 Rank-deficient designs, including constant predictors and one-sided
 sign-conditioned samples, have `inference_status = unavailable` and

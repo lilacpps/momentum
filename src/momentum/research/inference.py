@@ -41,6 +41,10 @@ class RankDeficientDesignError(ValueError):
     """Raised when an intercept-plus-predictor design is not identifiable."""
 
 
+class InferenceContractError(ValueError):
+    """Raised when a robust covariance result violates the frozen contract."""
+
+
 @dataclass(frozen=True)
 class BootstrapSummary:
     standard_error: float
@@ -130,6 +134,10 @@ def _fit_statsmodels(
                 else "unavailable" if actual_df is None else "mismatch"
             ),
         }
+        if actual_df is not None and actual_df != expected_df:
+            raise InferenceContractError(
+                f"cluster degrees of freedom mismatch: expected {expected_df}, got {actual_df}"
+            )
     elif covariance_method == "two_way_clustered":
         if groups is None or second_groups is None:
             raise ValueError("two-way cluster groups are required")

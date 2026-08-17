@@ -93,6 +93,14 @@ def _split_for_outcome(config: TrackBConfig, outcome_month: pd.Period) -> str:
     return config.split_for_outcome(outcome_month)
 
 
+def _universe_role(config: TrackBConfig, symbol: str) -> str:
+    if symbol in config.primary_symbols:
+        return "primary"
+    if symbol in config.secondary_symbols:
+        return "secondary_cross_robustness"
+    return "unclassified"
+
+
 def _build_monthly_observations(
     data: pd.DataFrame,
     config: TrackBConfig,
@@ -153,6 +161,7 @@ def _build_monthly_observations(
             outcome_month = formation_month + 1
             rows.append({
                 "symbol": symbol,
+                "universe_role": _universe_role(config, str(symbol)),
                 "formation_month": formation_month,
                 "outcome_month": outcome_month,
                 "past_12m_return": past_return,
@@ -162,7 +171,7 @@ def _build_monthly_observations(
             })
 
     observations = pd.DataFrame(rows, columns=[
-        "symbol", "formation_month", "outcome_month", "past_12m_return",
+        "symbol", "universe_role", "formation_month", "outcome_month", "past_12m_return",
         "next_1m_return", "sign", "split",
     ])
     analysis = observations[observations["split"].isin(config.analysis_splits)].copy()

@@ -301,6 +301,59 @@ def test_m1a_sensitivity_results_are_separate_and_explicit(track_b_config):
     assert two_way["statsmodels_covariance_kwargs"] == {"use_correction": True}
 
 
+def test_rank_deficient_bootstrap_returns_unavailable_row(track_b_config):
+    result = _run_m1a_synthetic(_daily_fixture(), track_b_config, include_sensitivity=True)
+    rows = result.regression_results.loc[
+        (result.regression_results["covariance_method"] == "moving_block_bootstrap")
+        & (result.regression_results["analysis_name"] == "sign_predictor_regression")
+    ]
+    assert len(rows) == 2
+    assert set(rows["inference_status"]) == {"unavailable"}
+    assert set(rows["inference_unavailable_reason"]) == {"rank_deficient_design"}
+
+
+def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
+    symbols = track_b_config.primary_symbols + (track_b_config.secondary_symbols[0],)
+    data = _daily_fixture(start="2015-01", end="2024-01", symbols=symbols)
+    primary_statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
+    failed_secondary = {**primary_statuses, **{
+        symbol: "fail" for symbol in track_b_config.secondary_symbols
+    }}
+    eligible_secondary = {
+        **failed_secondary,
+        track_b_config.secondary_symbols[0]: "pass",
+    }
+    without_secondary = run_m1a_track_b(
+        data, track_b_config, failed_secondary, track_b_config.freeze_version,
+        include_sensitivity=False,
+    )
+    with_secondary = run_m1a_track_b(
+        data, track_b_config, eligible_secondary, track_b_config.freeze_version,
+        include_sensitivity=False,
+    )
+    selector = (
+        (without_secondary.regression_results["symbol"] == "__pooled__")
+        & (without_secondary.regression_results["analysis_name"] == "continuous_regression")
+        & (without_secondary.regression_results["sample_period"].str.startswith("2017-01"))
+    )
+    primary_without = without_secondary.regression_results.loc[selector].iloc[0]
+    selector_with = (
+        (with_secondary.regression_results["symbol"] == "__pooled__")
+        & (with_secondary.regression_results["analysis_name"] == "continuous_regression")
+        & (with_secondary.regression_results["sample_period"].str.startswith("2017-01"))
+    )
+    primary_with = with_secondary.regression_results.loc[selector_with].iloc[0]
+    assert primary_with["nobs"] == primary_without["nobs"]
+    assert primary_with["beta"] == pytest.approx(primary_without["beta"])
+    assert set(with_secondary.regression_results["universe_role"]) == {
+        "primary", "secondary_cross_robustness",
+    }
+    assert not ((with_secondary.regression_results["result_role"] == "primary")
+                & (with_secondary.regression_results["universe_role"] == "secondary_cross_robustness")).any()
+    assert not ((with_secondary.regression_results["symbol"] == "__pooled__")
+                & (with_secondary.regression_results["universe_role"] == "secondary_cross_robustness")).any()
+
+
 def test_symbol_hac_is_unavailable_for_calendar_gap(track_b_config):
     data = _daily_fixture()
     missing = _session_close(pd.Period("2020-06"))
