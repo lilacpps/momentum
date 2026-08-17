@@ -127,7 +127,8 @@ def run_m0_backtest(data: pd.DataFrame, metadata: dict[str, Any] | None = None) 
         "episode_id", "entry_timestamp", "entry_price", "direction",
         "exit_timestamp", "exit_price", "status", "reversal_from_episode_id",
     ])
-    result_metadata = dict(METADATA)
-    if metadata:
-        result_metadata.update(metadata)
+    result_metadata = dict(metadata or {})
+    # M0 identity and accounting level are reserved: callers may add context,
+    # but cannot relabel a result as another research specification.
+    result_metadata.update(METADATA)
     return BacktestResult(bars=bars, ledger=ledger, metrics=gross_metrics(ledger, bars), metadata=result_metadata)

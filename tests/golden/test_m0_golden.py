@@ -62,7 +62,11 @@ def test_overnight_gap_is_not_attributed_to_new_position(synthetic_ohlc):
 
 
 def test_metadata_and_metrics_are_gross_only(synthetic_ohlc):
-    result = run_m0_backtest(synthetic_ohlc, {"symbol": "SYNTH"})
+    result = run_m0_backtest(synthetic_ohlc, {
+        "symbol": "SYNTH",
+        "academic_mop_replication": True,
+        "result_level": "full_broker_net",
+    })
     assert result.metadata["baseline_type"] == "simplified_daily_tsmom"
     assert result.metadata["academic_mop_replication"] is False
     assert result.metadata["result_level"] == "gross_price_only"

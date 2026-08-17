@@ -18,6 +18,17 @@ def test_short_valid_dataset_is_processed_as_warmup():
     assert (result.bars["executed_position"] == 0).all()
 
 
+def test_valid_ohlc_with_non_default_index_is_processed_by_position():
+    data = pd.DataFrame({
+        "timestamp": pd.date_range("2020-01-01", periods=2),
+        "open": [1.0, 2.0], "high": [1.0, 2.0],
+        "low": [1.0, 2.0], "close": [1.0, 2.0],
+    }, index=[1000, 1001])
+    result = run_m0_backtest(data)
+    assert result.bars["timestamp"].tolist() == data["timestamp"].tolist()
+    assert result.bars.index.tolist() == [0, 1]
+
+
 @pytest.mark.parametrize("column", ["open", "close"])
 def test_nan_ohlc_is_rejected(column):
     data = pd.DataFrame({

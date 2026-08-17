@@ -23,7 +23,7 @@ ENV/
 *.local.yml
 
 # Generated data, models, and research outputs
-data/
+/data/
 artifacts/
 models/
 reports/generated/
