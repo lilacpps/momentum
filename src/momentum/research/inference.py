@@ -34,6 +34,11 @@ class FittedInference:
     degrees_of_freedom: float
     nobs: int
     metadata: dict[str, Any]
+    result: Any | None = None
+
+
+class RankDeficientDesignError(ValueError):
+    """Raised when an intercept-plus-predictor design is not identifiable."""
 
 
 @dataclass(frozen=True)
@@ -50,6 +55,8 @@ def point_estimate(y: np.ndarray, x: np.ndarray) -> np.ndarray:
     """Return the unadjusted OLS intercept and slope."""
     design = sm.add_constant(np.asarray(x, dtype="float64"), has_constant="add")
     response = np.asarray(y, dtype="float64")
+    if np.linalg.matrix_rank(design) != design.shape[1]:
+        raise RankDeficientDesignError("design matrix is rank deficient")
     fitted = sm.OLS(response, design).fit()
     return np.asarray(fitted.params, dtype="float64")
 
@@ -69,6 +76,8 @@ def _fit_statsmodels(
 ) -> FittedInference:
     design = sm.add_constant(np.asarray(x, dtype="float64"), has_constant="add")
     response = np.asarray(y, dtype="float64")
+    if np.linalg.matrix_rank(design) != design.shape[1]:
+        raise RankDeficientDesignError("design matrix is rank deficient")
     base = sm.OLS(response, design).fit()
 
     if covariance_method == "HAC":
@@ -101,12 +110,25 @@ def _fit_statsmodels(
             use_t=CLUSTER_OPTIONS["use_t"],
         )
         covariance = np.asarray(fitted.cov_params(), dtype="float64")
-        degrees_of_freedom = float(fitted.df_resid)
+        cluster_count = int(len(np.unique(groups)))
+        expected_df = cluster_count - 1
+        actual_df = getattr(fitted, "df_resid_inference", None)
+        if actual_df is not None:
+            actual_df = float(actual_df)
+        degrees_of_freedom = actual_df if actual_df is not None else float("nan")
         metadata = {
             "cov_type": "cluster",
             "covariance_method": "calendar_month_clustered",
             "cluster_variable": "outcome_month",
             "covariance_options": dict(CLUSTER_OPTIONS),
+            "statsmodels_covariance_kwargs": dict(CLUSTER_OPTIONS),
+            "outcome_month_cluster_count": cluster_count,
+            "degrees_of_freedom_expected": expected_df,
+            "statsmodels_df_resid_inference": actual_df,
+            "df_validation_status": (
+                "match" if actual_df is not None and actual_df == expected_df
+                else "unavailable" if actual_df is None else "mismatch"
+            ),
         }
     elif covariance_method == "two_way_clustered":
         if groups is None or second_groups is None:
@@ -121,16 +143,24 @@ def _fit_statsmodels(
         # statsmodels' two-group sandwich helper supplies the covariance.  The
         # project convention uses the conservative smaller cluster count for
         # Student-t critical values, while recording the requested correction.
-        cluster_df = min(
-            len(np.unique(groups)),
-            len(np.unique(second_groups)),
-        ) - 1
+        symbol_cluster_count = int(len(np.unique(groups)))
+        outcome_month_cluster_count = int(len(np.unique(second_groups)))
+        cluster_df = min(symbol_cluster_count, outcome_month_cluster_count) - 1
         degrees_of_freedom = float(cluster_df)
         metadata = {
             "cov_type": "two_way_cluster",
             "covariance_method": "two_way_clustered",
             "cluster_variable": "symbol × outcome_month",
-            "covariance_options": dict(CLUSTER_OPTIONS),
+            "covariance_options": {"use_correction": True},
+            "statsmodels_covariance_kwargs": {"use_correction": True},
+            "project_inference_convention": {
+                "df_correction": True,
+                "use_t": True,
+                "degrees_of_freedom_rule": "min(symbol_cluster_count, outcome_month_cluster_count) - 1",
+            },
+            "symbol_cluster_count": symbol_cluster_count,
+            "outcome_month_cluster_count": outcome_month_cluster_count,
+            "degrees_of_freedom": degrees_of_freedom,
         }
     else:
         raise ValueError(f"unsupported covariance method: {covariance_method}")
@@ -141,10 +171,24 @@ def _fit_statsmodels(
         degrees_of_freedom=degrees_of_freedom,
         nobs=int(base.nobs),
         metadata=metadata,
+        result=fitted if covariance_method != "two_way_clustered" else None,
     )
 
 
 def coefficient_summary(fitted: FittedInference, coefficient_index: int = 1) -> dict[str, float]:
+    if fitted.result is not None:
+        interval = np.asarray(
+            fitted.result.conf_int(alpha=1.0 - CONFIDENCE_LEVEL)
+        )[coefficient_index]
+        return {
+            "alpha": float(fitted.result.params[0]),
+            "beta": float(fitted.result.params[coefficient_index]),
+            "standard_error": float(fitted.result.bse[coefficient_index]),
+            "t_stat": float(fitted.result.tvalues[coefficient_index]),
+            "ci_lower": float(interval[0]),
+            "ci_upper": float(interval[1]),
+            "nobs": fitted.nobs,
+        }
     estimate = float(fitted.params[coefficient_index])
     variance = float(fitted.covariance[coefficient_index, coefficient_index])
     standard_error = float(np.sqrt(variance)) if variance >= 0 else float("nan")
@@ -163,6 +207,19 @@ def coefficient_summary(fitted: FittedInference, coefficient_index: int = 1) -> 
 
 def linear_combination_summary(fitted: FittedInference, weights: Iterable[float]) -> dict[str, float]:
     vector = np.asarray(tuple(weights), dtype="float64")
+    if fitted.result is not None:
+        test = fitted.result.t_test(vector.reshape(1, -1), use_t=True)
+        interval = np.asarray(
+            test.conf_int(alpha=1.0 - CONFIDENCE_LEVEL)
+        ).reshape(-1, 2)[0]
+        return {
+            "estimate": float(np.asarray(test.effect).reshape(-1)[0]),
+            "standard_error": float(np.asarray(test.sd).reshape(-1)[0]),
+            "t_stat": float(np.asarray(test.tvalue).reshape(-1)[0]),
+            "ci_lower": float(interval[0]),
+            "ci_upper": float(interval[1]),
+            "nobs": fitted.nobs,
+        }
     estimate = float(vector @ fitted.params)
     variance = float(vector @ fitted.covariance @ vector)
     standard_error = float(np.sqrt(variance)) if variance >= 0 else float("nan")

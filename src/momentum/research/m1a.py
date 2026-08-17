@@ -9,10 +9,15 @@ import numpy as np
 import pandas as pd
 import statsmodels
 
-from momentum.data.track_b import MonthlyObservationResult, build_monthly_observations
+from momentum.data.track_b import (
+    MonthlyObservationResult,
+    _build_synthetic_monthly_observations,
+    _build_track_b_monthly_observations,
+)
 from momentum.research.inference import (
     CONFIDENCE_LEVEL,
     HAC_LAG,
+    RankDeficientDesignError,
     SPEC_VERSION,
     _fit_statsmodels,
     coefficient_summary,
@@ -21,7 +26,7 @@ from momentum.research.inference import (
     outcome_months_are_consecutive,
     point_estimate,
 )
-from momentum.research.track_b_config import TrackBConfig, validate_m1a_real_data_gate
+from momentum.research.track_b_config import TrackBConfig
 
 
 @dataclass(frozen=True)
@@ -66,7 +71,7 @@ def _common_metadata(
         "hac_lag": HAC_LAG if covariance_method == "HAC" else None,
         "cluster_variable": {
             "calendar_month_clustered": "outcome_month",
-            "two_way_clustered": "symbol × outcome_month",
+            "two_way_clustered": "symbol x outcome_month",
         }.get(covariance_method),
         "data_source": config.data_source,
         "price_type": config.price_type,
@@ -98,10 +103,11 @@ def _fit_or_unavailable(
     try:
         groups = None
         second_groups = None
-        if covariance_method in {"calendar_month_clustered", "two_way_clustered"}:
+        if covariance_method == "calendar_month_clustered":
             groups = pd.factorize(frame["outcome_month"], sort=True)[0]
         if covariance_method == "two_way_clustered":
-            second_groups = pd.factorize(frame["symbol"], sort=True)[0]
+            groups = pd.factorize(frame["symbol"], sort=True)[0]
+            second_groups = pd.factorize(frame["outcome_month"], sort=True)[0]
         fitted = _fit_statsmodels(
             y,
             x,
@@ -110,10 +116,12 @@ def _fit_or_unavailable(
             second_groups=second_groups,
         )
         return fitted, fitted.params, None
+    except RankDeficientDesignError:
+        return None, None, "rank_deficient_design"
     except (np.linalg.LinAlgError, ValueError, TypeError, ZeroDivisionError) as exc:
         try:
             params = point_estimate(y, x)
-        except (np.linalg.LinAlgError, ValueError):
+        except (np.linalg.LinAlgError, ValueError, RankDeficientDesignError):
             params = None
         return None, params, f"inference_error:{type(exc).__name__}"
 
@@ -139,7 +147,7 @@ def _regression_row(
         lag_or_cluster = "cluster=outcome_month"
     else:
         inference_method = "OLS + two-way clustered SE"
-        lag_or_cluster = "cluster=symbol × outcome_month"
+        lag_or_cluster = "cluster=symbol x outcome_month"
     row = _common_metadata(
         config,
         analysis_name=analysis_name,
@@ -187,6 +195,28 @@ def _regression_row(
                 "use_t": True,
             },
         })
+        if covariance_method == "calendar_month_clustered":
+            count = int(frame["outcome_month"].nunique())
+            row.update({
+                "outcome_month_cluster_count": count,
+                "degrees_of_freedom_expected": count - 1,
+                "statsmodels_df_resid_inference": None,
+                "df_validation_status": "unavailable",
+            })
+        elif covariance_method == "two_way_clustered":
+            symbol_count = int(frame["symbol"].nunique())
+            month_count = int(frame["outcome_month"].nunique())
+            row.update({
+                "statsmodels_covariance_kwargs": {"use_correction": True},
+                "project_inference_convention": {
+                    "df_correction": True,
+                    "use_t": True,
+                    "degrees_of_freedom_rule": "min(symbol_cluster_count, outcome_month_cluster_count) - 1",
+                },
+                "symbol_cluster_count": symbol_count,
+                "outcome_month_cluster_count": month_count,
+                "degrees_of_freedom": min(symbol_count, month_count) - 1,
+            })
     return row
 
 
@@ -200,12 +230,15 @@ def _sign_conditioned_rows(config: TrackBConfig, frame: pd.DataFrame, split: str
     else:
         nonzero["positive_indicator"] = (nonzero["sign"] > 0).astype("float64")
         covariance_method = "calendar_month_clustered" if pooled else "HAC"
-        fitted, params, reason = _fit_or_unavailable(
-            nonzero,
-            "positive_indicator",
-            covariance_method=covariance_method,
-            symbol_level=not pooled,
-        )
+        if nonzero["positive_indicator"].nunique() < 2:
+            fitted, params, reason = None, None, "rank_deficient_design"
+        else:
+            fitted, params, reason = _fit_or_unavailable(
+                nonzero,
+                "positive_indicator",
+                covariance_method=covariance_method,
+                symbol_level=not pooled,
+            )
     covariance_method = "calendar_month_clustered" if pooled else "HAC"
     group_sizes = {
         "positive_nobs": int((nonzero["sign"] > 0).sum()),
@@ -255,6 +288,14 @@ def _sign_conditioned_rows(config: TrackBConfig, frame: pd.DataFrame, split: str
                     "use_correction": True, "df_correction": True, "use_t": True,
                 },
             })
+            if pooled:
+                count = int(nonzero["outcome_month"].nunique())
+                row.update({
+                    "outcome_month_cluster_count": count,
+                    "degrees_of_freedom_expected": count - 1,
+                    "statsmodels_df_resid_inference": None,
+                    "df_validation_status": "unavailable",
+                })
         row.update({"metric": metric, "regression_method": "OLS", **group_sizes})
         rows.append(row)
     return rows
@@ -302,36 +343,15 @@ def _bootstrap_row(config: TrackBConfig, frame: pd.DataFrame, split: str, analys
     return row
 
 
-def run_m1a(
-    daily: pd.DataFrame,
+def _run_m1a_analysis(
+    monthly_result: MonthlyObservationResult,
     config: TrackBConfig,
     *,
-    data_origin: str = "synthetic",
-    structural_status_by_symbol: dict[str, str] | None = None,
-    validation_freeze_version: int | None = None,
-    include_sensitivity: bool = True,
+    data_origin: str,
+    include_sensitivity: bool,
 ) -> M1AResult:
-    """Run M1A on supplied daily data without loading historical files."""
-    if data_origin not in {"synthetic", "track_b"}:
-        raise ValueError("data_origin must be synthetic or track_b")
-    if data_origin == "track_b":
-        if structural_status_by_symbol is None or validation_freeze_version is None:
-            raise ValueError("track_b execution requires structural validation statuses and freeze version")
-        eligible_secondary = validate_m1a_real_data_gate(
-            config, structural_status_by_symbol, validation_freeze_version
-        )
-        requested_symbols = set(config.primary_symbols) | set(eligible_secondary)
-        available_symbols = set(daily["symbol"].dropna().astype(str)) if "symbol" in daily else set()
-        missing_primary = sorted(set(config.primary_symbols) - available_symbols)
-        if missing_primary:
-            raise ValueError(f"track_b input is missing frozen primary symbols: {missing_primary}")
-    else:
-        requested_symbols = set(daily["symbol"].dropna().astype(str)) if "symbol" in daily else set()
-
-    monthly_result: MonthlyObservationResult = build_monthly_observations(daily, config)
+    """Run the statistical analysis on observations supplied by a gated builder."""
     observations = monthly_result.observations
-    if requested_symbols:
-        observations = observations[observations["symbol"].astype(str).isin(requested_symbols)].copy()
     analysis_observations = observations[observations["split"].isin(config.analysis_splits)].copy()
 
     regression_rows: list[dict[str, Any]] = []
@@ -407,4 +427,43 @@ def run_m1a(
         regression_results=pd.DataFrame(regression_rows),
         diagnostics=diagnostics,
         metadata=metadata,
+    )
+
+
+def run_m1a_track_b(
+    daily: pd.DataFrame,
+    config: TrackBConfig,
+    structural_status_by_symbol: dict[str, str],
+    validation_freeze_version: int,
+    *,
+    include_sensitivity: bool = True,
+) -> M1AResult:
+    """Run the production M1A Track B path with its internal structural gate."""
+    monthly_result = _build_track_b_monthly_observations(
+        daily,
+        config,
+        structural_status_by_symbol,
+        validation_freeze_version,
+    )
+    return _run_m1a_analysis(
+        monthly_result,
+        config,
+        data_origin="track_b",
+        include_sensitivity=include_sensitivity,
+    )
+
+
+def _run_m1a_synthetic(
+    daily: pd.DataFrame,
+    config: TrackBConfig,
+    *,
+    include_sensitivity: bool = True,
+) -> M1AResult:
+    """Private test-support entry point; not part of the production API."""
+    monthly_result = _build_synthetic_monthly_observations(daily, config)
+    return _run_m1a_analysis(
+        monthly_result,
+        config,
+        data_origin="synthetic",
+        include_sensitivity=include_sensitivity,
     )

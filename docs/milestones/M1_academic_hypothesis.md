@@ -145,12 +145,16 @@ M1全体がcompleteでなくても、M1AがcompleteならM2をunblockする。M1
 
 ### M1A
 
-- [ ] Track B development / validation / final holdout periods frozen in artifact
-- [ ] Track B symbol universe frozen in artifact
-- [ ] Track B data source / price type frozen in artifact
-- [ ] Track B timezone / daily boundary frozen in artifact
-- [ ] Calendar-month, missing-month, and zero-return semantics accepted from `docs/07`
-- [ ] Symbol HAC(12) and pooled calendar-month primary inference frozen
+- [x] Track B development / validation / final holdout periods frozen in artifact
+- [x] Track B symbol universe frozen in artifact
+- [x] Track B data source / price type frozen in artifact
+- [x] Track B timezone / daily boundary frozen in artifact
+- [x] Calendar-month, missing-month, and zero-return semantics accepted from `docs/07`
+- [x] Symbol HAC(12) and pooled calendar-month primary inference frozen
+- [x] Covariance options and statsmodels inference authority recorded
+- [x] Rank-deficient design and calendar-gap unavailable behavior implemented
+- [x] Synthetic implementation and deterministic tests completed
+- [x] Output metadata and diagnostics contract implemented
 
 ### M1B
 

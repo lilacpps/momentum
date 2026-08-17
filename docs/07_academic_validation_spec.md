@@ -1,5 +1,40 @@
 # M1 / M2 / M5 / Challenge Academic Validation Specification
 
+## M1A v1 implementation safety convention
+
+The implementation identifier is `spec_version = m1a-practical-v1`. The only
+production execution entry point is `run_m1a_track_b`. Synthetic fixtures may
+use private test-support builders, but they are not production package exports.
+The Track B builder performs the structural-status and matching `freeze_version`
+gate itself, filters eligible symbols before monthly construction and diagnostics,
+and constructs real-data observations only through the Validation outcome month.
+Final Holdout observations are not constructed or returned by the real-data path.
+
+For real Track B input, `timestamp` must be timezone-aware UTC and must represent
+the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is
+accepted only by the private synthetic fixture path. Calendar month identity is
+derived from the New York local date; a bar-open timestamp or a non-17:00 local
+timestamp is invalid.
+
+Statsmodels robust results are the inference authority for one-way HAC and
+calendar-month cluster confidence intervals: `conf_int()` and `t_test()` are
+used directly with the frozen covariance options. For pooled cluster results,
+metadata records `outcome_month_cluster_count`, the expected degrees of freedom
+(`cluster_count - 1`), `statsmodels_df_resid_inference`, and whether those values
+match. OLS `df_resid` is never used as a fallback for clustered inference.
+
+Rank-deficient designs, including constant predictors and one-sided
+sign-conditioned samples, have `inference_status = unavailable` and
+`inference_unavailable_reason = rank_deficient_design`. Symbol HAC(12) is also
+unavailable, without row compression, when outcome months are not a consecutive
+calendar-month sequence.
+
+For two-way cluster sensitivity, the statsmodels API metadata contains only
+`use_correction = True` because that is the supported `cov_cluster_2groups`
+option. The project-side convention separately records `df_correction = True`,
+`use_t = True`, cluster counts, and
+`degrees_of_freedom = min(symbol_cluster_count, outcome_month_cluster_count) - 1`.
+
 この文書はM1/M2/M5およびHuang/TSH challengeのnormative research contractです。
 ここにない実装詳細は、原典の仕様として扱わず、実装前に別途
 `implementation convention` として記録します。
@@ -157,6 +192,11 @@ M1AのDaily input timestampは、Track BのNew York 17:00 Daily sessionのnomina
 calendar monthはそのtimestampを`America/New_York`へ変換したlocal dateから決定し、bar-open timestampをmonth identityの判定には使いません。
 timezone-naiveなsynthetic inputは、current Track Bのraw timestamp contractに従いUTCとして扱います。
 
+Real Track B requires timezone-aware UTC timestamps. Timezone-naive timestamps
+are accepted only by private synthetic fixtures; they are not normalized on the
+real-data path. The timestamp must be the nominal `America/New_York` 17:00
+session close, and calendar month identity uses that local date rather than a
+bar-open timestamp.
 #### Covariance options
 
 statsmodelsのlibrary defaultに依存せず、次のoptionsを明示的に渡します。confidence levelは`0.95`です。

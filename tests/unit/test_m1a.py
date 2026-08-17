@@ -7,9 +7,14 @@ import pandas as pd
 import pytest
 import yaml
 
-from momentum.data.track_b import TrackBDailyValidationError, build_monthly_observations, validate_track_b_daily
+from momentum.data.track_b import (
+    TrackBDailyValidationError,
+    _build_synthetic_monthly_observations,
+    validate_track_b_daily,
+)
 from momentum.research.inference import moving_block_bootstrap, outcome_months_are_consecutive
-from momentum.research.m1a import run_m1a
+from momentum.research.m1a import _run_m1a_synthetic
+from momentum.research import run_m1a_track_b
 from momentum.research.track_b_config import TrackBConfigError, load_track_b_config, validate_m1a_real_data_gate
 
 
@@ -74,13 +79,36 @@ def test_config_loader_rejects_non_frozen_status(tmp_path, track_b_config):
 def test_long_daily_validation_is_symbol_local_and_non_mutating():
     data = _daily_fixture(start="2019-01", end="2019-02", symbols=("XAUUSD", "EURUSD"))
     original = data.copy(deep=True)
-    validated = validate_track_b_daily(data)
+    config = load_track_b_config(ROOT / "config" / "research_track_b.yaml")
+    validated = validate_track_b_daily(data, config, allow_naive_timestamp=True)
     assert validated["timestamp"].dt.tz is not None
     pd.testing.assert_frame_equal(data, original)
 
     duplicate = pd.concat([data, data.iloc[[0]]], ignore_index=True)
     with pytest.raises(TrackBDailyValidationError, match="duplicate"):
-        validate_track_b_daily(duplicate)
+        validate_track_b_daily(duplicate, config, allow_naive_timestamp=True)
+
+
+def test_track_b_timestamp_requires_utc_aware_nominal_ny17(track_b_config):
+    winter = _daily_fixture(start="2020-01", end="2020-01", symbols=("XAUUSD",))
+    summer = _daily_fixture(start="2020-07", end="2020-07", symbols=("XAUUSD",))
+    valid = pd.concat([winter, summer], ignore_index=True)
+    assert len(validate_track_b_daily(valid, track_b_config)) == 2
+
+    naive = valid.copy()
+    naive["timestamp"] = naive["timestamp"].dt.tz_localize(None)
+    with pytest.raises(TrackBDailyValidationError, match="timezone-aware"):
+        validate_track_b_daily(naive, track_b_config)
+
+    non_utc = valid.copy()
+    non_utc["timestamp"] = non_utc["timestamp"].dt.tz_convert("Asia/Tokyo")
+    with pytest.raises(TrackBDailyValidationError, match="UTC"):
+        validate_track_b_daily(non_utc, track_b_config)
+
+    wrong_clock = valid.copy()
+    wrong_clock.loc[0, "timestamp"] += pd.Timedelta(hours=1)
+    with pytest.raises(TrackBDailyValidationError, match="nominal daily close"):
+        validate_track_b_daily(wrong_clock, track_b_config)
 
 
 def test_monthly_builder_uses_last_close_and_exact_calendar_month_arithmetic(track_b_config):
@@ -96,14 +124,14 @@ def test_monthly_builder_uses_last_close_and_exact_calendar_month_arithmetic(tra
         "close",
     ].iloc[0]
     extra = data.loc[(data["symbol"] == "XAUUSD") & (data["timestamp"] == _session_close(pd.Period("2020-06")))].copy()
-    extra["timestamp"] = extra["timestamp"] + pd.Timedelta(hours=1)
+    extra["timestamp"] = pd.Timestamp("2020-06-30 17:00", tz="America/New_York").tz_convert("UTC")
     extra["close"] = 999.0
     extra["open"] = 998.9
     extra["high"] = 999.2
     extra["low"] = 998.8
     data = pd.concat([data, extra], ignore_index=True).sort_values(["symbol", "timestamp"]).reset_index(drop=True)
 
-    built = build_monthly_observations(data, track_b_config)
+    built = _build_synthetic_monthly_observations(data, track_b_config)
     row = built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["formation_month"] == pd.Period("2020-06"))
@@ -126,20 +154,15 @@ def test_calendar_month_uses_new_york_local_date_not_utc_bar_open(track_b_config
     replacement["high"] = 777.2
     replacement["low"] = 776.8
     data = pd.concat([data, pd.DataFrame([replacement])], ignore_index=True).sort_values("timestamp")
-    built = build_monthly_observations(data, track_b_config)
-    row = built.observations.loc[
-        (built.observations["formation_month"] == pd.Period("2020-05"))
-        & (built.observations["outcome_month"] == pd.Period("2020-06"))
-    ]
-    assert len(row) == 1
-    assert row.iloc[0]["next_1m_return"] == pytest.approx(777.0 / may_close - 1.0)
+    with pytest.raises(TrackBDailyValidationError, match="nominal daily close"):
+        _build_synthetic_monthly_observations(data, track_b_config)
 
 
 def test_missing_calendar_month_is_excluded_without_fill(track_b_config):
     data = _daily_fixture()
     missing = _session_close(pd.Period("2019-06"))
     data = data.loc[~((data["symbol"] == "XAUUSD") & (data["timestamp"] == missing))].copy()
-    built = build_monthly_observations(data, track_b_config)
+    built = _build_synthetic_monthly_observations(data, track_b_config)
     assert len(built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["formation_month"] == pd.Period("2019-06"))
@@ -150,20 +173,20 @@ def test_missing_calendar_month_is_excluded_without_fill(track_b_config):
 
 def test_outcome_month_split_and_final_holdout_is_not_returned_by_analysis(track_b_config):
     data = _daily_fixture()
-    built = build_monthly_observations(data, track_b_config)
+    built = _build_synthetic_monthly_observations(data, track_b_config)
     final_row = built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["formation_month"] == pd.Period("2023-12"))
     ].iloc[0]
     assert final_row["outcome_month"] == pd.Period("2024-01")
     assert final_row["split"] == "final_holdout"
-    result = run_m1a(data, track_b_config, include_sensitivity=False)
+    result = _run_m1a_synthetic(data, track_b_config, include_sensitivity=False)
     assert "final_holdout" not in set(result.observations["split"])
     assert (result.observations["outcome_month"] < pd.Period("2024-01")).all()
 
 
 def test_warmup_is_history_but_first_development_outcome_is_assigned_by_outcome_month(track_b_config):
-    built = build_monthly_observations(_daily_fixture(), track_b_config)
+    built = _build_synthetic_monthly_observations(_daily_fixture(), track_b_config)
     first_development = built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["outcome_month"] == pd.Period("2017-01"))
@@ -179,7 +202,7 @@ def test_warmup_is_history_but_first_development_outcome_is_assigned_by_outcome_
 
 def test_m1a_results_have_primary_metadata_and_zero_semantics(track_b_config):
     data = _daily_fixture()
-    result = run_m1a(data, track_b_config, include_sensitivity=False)
+    result = _run_m1a_synthetic(data, track_b_config, include_sensitivity=False)
     regression = result.regression_results
     assert set(regression["result_role"]) == {"primary"}
     assert set(regression["spec_version"]) == {"m1a-practical-v1"}
@@ -203,6 +226,26 @@ def test_m1a_results_have_primary_metadata_and_zero_semantics(track_b_config):
     sign_effect = result.sign_conditioned_results
     assert set(sign_effect["metric"]) == {"positive_mean", "negative_mean", "difference"}
     assert result.diagnostics["zero_predictor_observations"] == 0
+    assert pooled["outcome_month_cluster_count"] == 60
+    assert pooled["degrees_of_freedom_expected"] == 59
+    assert pooled["statsmodels_df_resid_inference"] == 59
+    assert pooled["df_validation_status"] == "match"
+
+
+def test_rank_deficient_design_is_unavailable(track_b_config):
+    result = _run_m1a_synthetic(_daily_fixture(), track_b_config, include_sensitivity=False)
+    sign = result.regression_results.loc[
+        (result.regression_results["symbol"] == "XAUUSD")
+        & (result.regression_results["analysis_name"] == "sign_predictor_regression")
+        & (result.regression_results["sample_period"].str.startswith("2017-01"))
+    ].iloc[0]
+    assert sign["inference_status"] == "unavailable"
+    assert sign["inference_unavailable_reason"] == "rank_deficient_design"
+    effects = result.sign_conditioned_results.loc[
+        (result.sign_conditioned_results["symbol"] == "XAUUSD")
+        & (result.sign_conditioned_results["sample_period"].str.startswith("2017-01"))
+    ]
+    assert set(effects["inference_unavailable_reason"]) == {"rank_deficient_design"}
 
 
 def test_zero_return_is_retained_for_sign_regression_but_excluded_from_group_effect(track_b_config):
@@ -218,7 +261,7 @@ def test_zero_return_is_retained_for_sign_regression_but_excluded_from_group_eff
     data.loc[target, "high"] = prior + 0.2
     data.loc[target, "low"] = prior - 0.2
 
-    result = run_m1a(data, track_b_config, include_sensitivity=False)
+    result = _run_m1a_synthetic(data, track_b_config, include_sensitivity=False)
     zero_rows = result.observations.loc[
         (result.observations["symbol"] == "XAUUSD")
         & (result.observations["formation_month"] == pd.Period("2016-12"))
@@ -244,20 +287,25 @@ def test_zero_return_is_retained_for_sign_regression_but_excluded_from_group_eff
 
 
 def test_m1a_sensitivity_results_are_separate_and_explicit(track_b_config):
-    result = run_m1a(_varying_daily_fixture(), track_b_config, include_sensitivity=True)
+    result = _run_m1a_synthetic(_varying_daily_fixture(), track_b_config, include_sensitivity=True)
     sensitivity = result.regression_results.loc[result.regression_results["result_role"] == "sensitivity"]
     assert {"two_way_clustered", "moving_block_bootstrap"}.issubset(set(sensitivity["covariance_method"]))
     bootstrap = sensitivity.loc[sensitivity["covariance_method"] == "moving_block_bootstrap"].iloc[0]
     assert bootstrap["bootstrap_replications"] == 5000
     assert bootstrap["bootstrap_seed"] == 20260817
     assert bootstrap["block_length_months"] == 12
+    two_way = sensitivity.loc[sensitivity["covariance_method"] == "two_way_clustered"].iloc[0]
+    assert two_way["symbol_cluster_count"] == 2
+    assert two_way["outcome_month_cluster_count"] == 60
+    assert two_way["degrees_of_freedom"] == 1
+    assert two_way["statsmodels_covariance_kwargs"] == {"use_correction": True}
 
 
 def test_symbol_hac_is_unavailable_for_calendar_gap(track_b_config):
     data = _daily_fixture()
     missing = _session_close(pd.Period("2020-06"))
     data = data.loc[~((data["symbol"] == "XAUUSD") & (data["timestamp"] == missing))].copy()
-    result = run_m1a(data, track_b_config, include_sensitivity=False)
+    result = _run_m1a_synthetic(data, track_b_config, include_sensitivity=False)
     rows = result.regression_results.loc[
         (result.regression_results["symbol"] == "XAUUSD")
         & (result.regression_results["analysis_name"] == "continuous_regression")
@@ -269,7 +317,7 @@ def test_symbol_hac_is_unavailable_for_calendar_gap(track_b_config):
 
 
 def test_bootstrap_uses_calendar_slots_and_is_deterministic(track_b_config):
-    observations = build_monthly_observations(_daily_fixture(), track_b_config).observations
+    observations = _build_synthetic_monthly_observations(_daily_fixture(), track_b_config).observations
     sample = observations.loc[observations["split"] == "development"].copy()
     first = moving_block_bootstrap(
         sample, "past_12m_return", "next_1m_return",
@@ -299,13 +347,47 @@ def test_gate_primary_failure_blocks_but_secondary_failure_does_not(track_b_conf
         validate_m1a_real_data_gate(track_b_config, statuses, track_b_config.freeze_version)
 
 
+def test_public_surface_only_exposes_track_b_runner(track_b_config):
+    import momentum.research as research
+
+    assert research.__all__ == ["run_m1a_track_b"]
+    assert callable(run_m1a_track_b)
+    assert not hasattr(research, "run_m1a_synthetic")
+    assert not hasattr(research, "build_monthly_observations")
+
+
+def test_track_b_runner_gates_and_excludes_holdout_and_failed_secondary(track_b_config):
+    symbols = track_b_config.primary_symbols + track_b_config.secondary_symbols + ("EXTRA",)
+    data = _daily_fixture(start="2015-01", end="2024-01", symbols=symbols)
+    statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
+    statuses.update({symbol: "fail" for symbol in track_b_config.secondary_symbols})
+    result = run_m1a_track_b(
+        data,
+        track_b_config,
+        statuses,
+        track_b_config.freeze_version,
+        include_sensitivity=False,
+    )
+    assert "final_holdout" not in set(result.observations["split"])
+    assert set(result.observations["symbol"]) == set(track_b_config.primary_symbols)
+    assert "EXTRA" not in result.diagnostics["observations_by_symbol"]
+    with pytest.raises(TrackBConfigError, match="primary structural validation gate"):
+        run_m1a_track_b(
+            data,
+            track_b_config,
+            {**statuses, track_b_config.primary_symbols[0]: "fail"},
+            track_b_config.freeze_version,
+            include_sensitivity=False,
+        )
+
+
 def test_future_month_mutation_does_not_change_prior_observations(track_b_config):
     data = _daily_fixture()
     mutated = data.copy()
     cutoff = _session_close(pd.Period("2021-01"))
     mutated.loc[mutated["timestamp"] > cutoff, "close"] *= 5.0
-    before = run_m1a(data, track_b_config, include_sensitivity=False).observations
-    after = run_m1a(mutated, track_b_config, include_sensitivity=False).observations
+    before = _run_m1a_synthetic(data, track_b_config, include_sensitivity=False).observations
+    after = _run_m1a_synthetic(mutated, track_b_config, include_sensitivity=False).observations
     before = before.loc[before["outcome_month"] < pd.Period("2021-01")].reset_index(drop=True)
     after = after.loc[after["outcome_month"] < pd.Period("2021-01")].reset_index(drop=True)
     pd.testing.assert_frame_equal(before, after)

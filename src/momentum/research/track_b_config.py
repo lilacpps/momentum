@@ -153,6 +153,8 @@ def validate_m1a_real_data_gate(
     validation_freeze_version: int,
 ) -> tuple[str, ...]:
     """Validate the primary gate and return eligible secondary symbols."""
+    if config.status != "frozen" or config.freeze_version <= 0:
+        raise TrackBConfigError("current Track B artifact is not a valid frozen version")
     if validation_freeze_version != config.freeze_version:
         raise TrackBConfigError("structural validation freeze_version does not match current artifact")
     missing = [symbol for symbol in config.primary_symbols if symbol not in structural_status_by_symbol]
