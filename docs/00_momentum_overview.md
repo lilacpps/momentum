@@ -155,6 +155,10 @@ M5でvolatility scalingまで入って初めてreference strategy comparatorが�
 - asset-by-asset predictability
 - pooled regression inference
 - wild / pairs bootstrap
+
+M1Aのprimary inferenceはsymbol-level HAC/Newey-West（lag 12）とpooled calendar-month clustered SEです。
+two-way symbol × calendar-month clusteringとcalendar-month block bootstrapはsensitivityです。M1/M2の
+normative methodologyは`docs/07_academic_validation_spec.md`を参照します。
 - TSM vs TSH
 - long / short leg attribution
 

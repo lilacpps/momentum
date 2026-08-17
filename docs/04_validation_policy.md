@@ -42,8 +42,8 @@ M0がnegativeでもcorrectなら完了。
 M0 implementation
 -> golden fixture / synthetic data / unit tests
 -> engine correctness確定
--> Track B development / validation / final holdout / symbol universe /
-   data source / timezone / daily boundary freeze
+-> Track B concrete freeze artifactを作成し、development / validation / final holdout /
+   symbol universe / data source / price type / timezone / daily boundaryをfreeze
 -> 実historical dataで初めてgross performanceを生成
 -> M1
 ```
@@ -66,11 +66,37 @@ daily boundary
 
 Track Aのpublished replication sampleは既知のreference sampleなので、このfinal holdoutには含めません。
 
+### Track B freeze artifact contract
+
+Track Bのhistorical predictive/performance analysisを開始する前に、freezeされた具体値を
+machine-readableまたはversion-controlled artifactとして保存します。artifactは少なくとも次を持ちます。
+
+```text
+development_period
+validation_period
+final_holdout_period
+symbol_universe
+data_source
+price_type
+timezone
+daily_bar_boundary
+freeze_date
+freeze_version
+notes
+```
+
+このsectionは、Track Bのfreeze時期、required gate、artifact保存、version policyについてauthoritativeです。
+`data_source` / `price_type` / `timezone` / `daily_bar_boundary`の意味とデータ検証契約は
+`docs/03_data_and_costs.md`、M1のmethodologyは`docs/07_academic_validation_spec.md`を参照します。
+今回、未決の具体値を推測せず、artifactの実体や値は追加しません。将来は
+`config/research_track_b.yaml`等のversion-controlled artifactを利用できます。
+
 ## M1 — Academic Hypothesis + Statistical Challenge
 
 M1はworkstream別にstatusを持つ。
 
-- M1A Practical Predictability: `Ready after Track B split / universe freeze`
+- M1A Practical Predictability: `Ready after Track B concrete freeze artifact`
+- AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`
 - M1C-Huang-practical-analogue: `Ready after Huang methodology contract freeze and Track B data`
@@ -105,7 +131,7 @@ naive IID / conventional pooled t-valueだけをprimary evidenceにしません�
 
 ## M2 — Practical Monthly Comparator
 
-M1Aの完了後に開始可能。M1B/M1Cが未完でもPractical Trackを停止しない。
+M1Aの完了後に開始可能。M1B/M1Cが未完でもM2をblockせず、Practical Trackを停止しない。
 
 monthly decision / 12 calendar-month formation / 1-month holdingを実装し、M0 daily ruleとの差を比較します。
 

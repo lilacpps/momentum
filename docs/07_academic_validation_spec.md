@@ -20,7 +20,10 @@ MOP等のpublished sampleは結果が既知なので、**replication sample**と
 ## 1.2 Track B — Practical Spot/CFD
 
 M0 implementation、golden fixture / synthetic data / unit tests、engine correctness
-判定を先に完了します。実historical performanceを一件も生成する前に、以下をfreezeします。
+判定を先に完了します。M1Aは、`docs/04_validation_policy.md`に定義された有効なTrack B
+concrete freeze artifactが存在する場合にだけReadyとします。freezeの時期、artifact保存、version policyは
+`docs/04_validation_policy.md`、data source / price type / timezone / daily boundaryの意味は
+`docs/03_data_and_costs.md`を参照します。
 
 - development period
 - validation period
@@ -37,10 +40,14 @@ final holdoutはM7まで原則見ません。
 ## 1.3 M1 workstream status
 
 M1は一つのReady gateではなく、次のworkstreamごとに判定します。
+許容statusは少なくとも`not_ready`、`ready`、`in_progress`、`complete`、
+`data_unavailable_pending`です。例えば`M1A complete / M1B data_unavailable_pending /
+M1C pending`を正式な状態として扱い、M1全体を単一booleanに集約しません。
 
 | Workstream | 内容 | Status |
 |---|---|---|
-| M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Ready after Track B split / universe freeze |
+| M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Ready after valid Track B concrete freeze artifact |
+| AQR Reference Sanity | workbook inventory and factor-series sanity | Ready independently of eligible MOP underlying data |
 | M1B MOP Regression Comparator | eligible futures / forward / excess-return underlying series | Ready only after eligible reference underlying data is identified |
 | M1C-Huang-reference | Huang methodology contract + eligible MOP-like reference underlying series | Ready after methodology freeze and eligible reference underlying data |
 | M1C-Huang-practical-analogue | same frozen methodology on Track B data | Ready after methodology freeze and Track B data |
@@ -70,7 +77,12 @@ past_12m_return[M] = P[M] / P[M-12] - 1
 next_1m_return[M]  = P[M+1] / P[M] - 1
 ```
 
-12か月returnには13個のmonth-end price observationsが必要です。
+`M-12`は観測month列の12行前ではなく、厳密に12 calendar months前のmonth `M-12`です。
+例えば`2020-06`のpredictorは`2019-06`を使います。calendar monthそのものにvalid Closeが
+存在しない場合は補間しません。forward-fill、backward-fill、zero-fill、nearest-month substitutionを
+禁止し、`P[M-12]`、`P[M]`、`P[M+1]`のいずれかが欠けるobservationはunavailableとします。
+必要なanalysis rowを作らず、missing/excluded countをdiagnostics metadataへ記録します。
+12か月returnには、必要なcalendar month identityを持つ13個のmonth-end price observationsが必要です。
 
 このfuture returnは統計的predictability用であり、tradable next-open PnLではありません。
 
@@ -96,6 +108,18 @@ next_1m_return = alpha + beta * past_12m_return + error
 next_1m_return = alpha + beta * sign(past_12m_return) + error
 ```
 
+zero-return semanticsは次の通り固定します。
+
+```text
+past_12m_return > 0  -> sign = +1
+past_12m_return < 0  -> sign = -1
+past_12m_return == 0 -> sign = 0
+```
+
+sign-conditioned analysisでは`past_12m_return == 0`をpositive/negative groupのどちらにも
+含めません。一方、sign-predictor regressionでは`sign(0)=0`としてrowを保持します。zero observation
+countはdiagnostic metadataへ記録します。
+
 report:
 
 - effect size
@@ -103,6 +127,25 @@ report:
 - sample size
 - symbol-level
 - pooled / panel summary
+
+### M1A inference roles
+
+symbol-levelのcontinuous regressionとsign regressionは、HAC / Newey-West、lag `12 months`を
+primary inferenceとします。最低限、`alpha`、`beta`、`standard_error`、`t_stat`、confidence interval、
+`nobs`、`covariance_method`、`hac_lag`を出力します。
+
+M1A pooled regressionのprimary inferenceはcalendar-month clustered standard errorsです。cluster unitは
+calendar monthであり、同一monthの複数symbolを独立観測として扱いません。two-way clustered SE
+（symbol × calendar month）とcalendar-month block bootstrapはsensitivityとして別出力し、primary resultへ
+混ぜません。出力には`result_role`（`primary` / `sensitivity`等）を持たせます。
+
+stats libraryを使う場合も自作実装の場合も、`regression_method`、`covariance_method`、`hac_lag`、
+`cluster_variable`、`small_sample_correction`、`confidence_level`をmethod metadataへ記録します。
+statsmodels等を使う場合はlibrary名、version、covariance optionsも記録します。
+
+M1出力は、少なくとも`track`、`workstream`、`analysis_name`、`symbol`、`sample_period`、`return_type`、
+`predictor_definition`、`dependent_definition`、`inference_method`、`covariance_method`、
+`lag_or_cluster`、`nobs`、`data_source`、`timezone`、`daily_boundary`、`spec_version`の意味を保持します。
 
 ---
 
@@ -167,6 +210,10 @@ MOP-compatible reference modeにはcap、floor、leverage limitを原則追加�
 
 future informationはvol estimateに入れません。
 
+上記の`position`はM5 strategy comparatorのsizing contractです。M1B regressionではpositionを作らず、
+volatility-standardized return `r/sigma`を回帰します。M1B regressionには`0.40` target-volatility
+multiplierを使用しません。40% sizingはM5 strategy comparatorに限定します。
+
 ## 3.3 Pooled regression family
 
 月次returnについて、instrumentとdateをstackしたpooled regressionを作り、
@@ -178,8 +225,25 @@ h = 1, 2, ..., 60 months
 
 で評価します。
 
-回帰のdependent / predictor双方のvolatility standardization、lag direction、return intervalは
-reference paperのequationをgolden testへ転記して固定します。
+### Canonical M1B equation
+
+M1Bのnormative equationはgolden testではなく、このsectionで固定します。instrument `s`のmonthly
+returnを`r[s,t]`、time-`t` returnに利用するex-ante annualized volatilityを`sigma[s,t-1]`とし、
+`standardized_return[s,t] = r[s,t] / sigma[s,t-1]`と定義します。
+
+```text
+standardized_return[s,t]
+    = alpha_h
+    + beta_h * standardized_return[s,t-h]
+    + error[s,t]
+
+h = 1, 2, ..., 60 months
+```
+
+従ってpredictorは`r[s,t-h] / sigma[s,t-h-1]`であり、future informationを使いません。
+dependent / predictorのreturn interval、lag direction、volatility indexingはこのcanonical formに
+従います。MOP paper-explicitな内容とprojectのimplementation conventionは別々に記録します。
+golden testはこのspecificationを検証するために使い、仕様自体をgolden testから導出しません。
 
 primary output:
 
@@ -189,6 +253,7 @@ primary output:
 - positive-continuation region / reversal region
 
 calendar-time dependenceを考慮し、MOP comparatorではmonthly-level clusteringを実装します。
+M1Bのregression outputに40% strategy sizingを混ぜず、strategy-level sizingはM5へ限定します。
 
 ## 3.4 Focused 12m -> 1m comparator
 
@@ -245,11 +310,12 @@ next_1m_return = alpha_s + beta_s * past_12m_return + error
 report:
 
 - observed t-stat
-- empirical null distribution
-- 5% / 1% critical values
-- bootstrap p-value
+- bootstrap sampling distribution / bootstrap t-statistic distribution
+- Huang reference 5% critical value: 97.5th percentile of simulated t-statistics
+- 1% critical value, if reported, with its explicitly documented percentile convention
+- bootstrap p-value, when using a separately labeled project convention
 - iterations
-- random seed
+- random seed and seed policy
 - resampling unit
 
 ### Huang methodology contract — freeze before implementation
@@ -267,8 +333,12 @@ report:
   Rademacher draw `v in {-1,+1}`, each probability 1/2; the predictor is held fixed
   [Huang §4.3, Eqs. (8)–(10), journal p.783]
 - nonparametric pairs bootstrap: observed `(standardized dependent, standardized predictor)`
-  pairsを、同時に、replacementありでT pairs resample [Huang §4.3, Eq. (11), journal p.784]
+  pairsを、同時に、replacementありでT pairs resampleする。各assetのidentityを保ち、assetごとに
+  T observationsのpathを生成してからstackしたpooled regressionを行う [Huang §4.3, Eq. (11),
+  journal p.784; Table 5]
 - test statistic: pooled regression slope t-statistic
+- 5% significanceのcritical valueはsimulated t-statisticsの97.5th percentile
+  [Huang §4.3, journal pp.783–784]
 - 1,000 simulated samples / method [Huang §4.3, journal pp.783–784]
 
 MOP EWMA anchor: [MOP §2.4, journal PDF pp.233–234, volatility equation and lag statement]
@@ -277,16 +347,47 @@ primary anchorとし、数式自体をこの文書へ転記します。
 
 **Implementation convention (paper text aloneで一意でない事項)**
 
-- seedはreplication metadataへ記録する固定整数とし、分析開始前に決める。
-- empirical one-sided p-valueは `mean(t* >= t_obs)`、two-sidedは
-  `mean(abs(t*) >= abs(t_obs))` とし、critical valueはbootstrap statisticの対応する
-  95th/99th percentileとする。
-- primary research questionはpositive TSM (`beta > 0`) のone-sided testとし、two-sided
-  diagnosticsは補助表とする。
-- missing rowはそのregressionのcomplete-caseとして除外し、各bootstrap replicateで再度
-  欠損を補間しない。sample size Tはfreeze後のcomplete-case数とする。
+- `bootstrap_seed`、`bootstrap_iterations`、`seed_policy`はM1C開始前にfreezeし、replication metadataへ
+  記録する。paper-explicit reference modeは`bootstrap_iterations = 1000`とし、10000等の追加反復は
+  別sensitivityとして扱う。seed値そのものは今回決めない。
+- `T_i = asset iのfreeze後complete-case observation count`とする。unbalanced practical dataでは、
+  asset i内のT_i observationsをreplacementありでresampleし、asset identity/pathを保持したまま
+  stackしてpooled regressionを行う。このT_iルールはproject implementation conventionであり、
+  Huang paperが共通Tを前提に記述したreference procedureそのものとは区別する。
+- missing rowはそのregressionのcomplete-caseとして除外し、各bootstrap replicateで欠損を補間しない。
+- `project_positive_tsm_one_sided`では、project conventionとして`mean(t* >= t_obs)`等のp-valueを
+  使用できるが、Huang reference critical valueとは別method・別result roleで出力する。
 - primary Huang bootstrapではtime-series blockやcross-sectional cluster resampleを追加しない。
   追加する場合は別method名の感度分析とする。
+
+### Huang reference fixed-effect procedure
+
+`Huang_reference_fixed_effect`はinstrument dummyを単にOLSへ加えるgeneric panel regressionではなく、
+Huang §4.4 Eq. (12)のasset内demeaningをreference procedureとします。M1Cのfocused standardized
+dependent variableとpredictorをそれぞれ`y[s,t] = r[s,t] / sigma[s,t-1]`、
+`x[s,t] = r[s,t-h] / sigma[s,t-h-1]`（focused caseは`h=12`）とし、canonical formは、
+
+```text
+(y[s,t] - mean_s(y[s]))
+    = beta_FE * (x[s,t] - mean_s(x[s]))
+    + error[s,t]
+```
+
+です。ここで`mean_s(.)`はasset sのfreeze-period sample meanです。Huang reference procedureでは、
+このdemeaned dataに対してwild bootstrapを行い、pairs bootstrapではdemeaning後の`(x, y)` pairsを
+asset identity/pathごとにreplacementありでresampleします。各assetのpathを生成してからstackする点を
+保持します。instrument dummyを使うgeneric panel fixed-effect sensitivityは
+`generic_panel_fixed_effect_sensitivity`という別method名で扱い、reference procedureと同一視しません。
+
+### Separate inference labels
+
+`Huang_reference_inference`は、原論文のbootstrap t-statistic distributionと、5% critical valueである
+97.5th percentileを再現します。これはnull hypothesis `beta = 0`とbootstrap sample generation
+mechanism（full-sample fitted model plus residual/Rademacher等）を混同しません。
+
+`project_positive_tsm_one_sided`はproject独自のpositive TSM (`beta > 0`) diagnosticです。project側で
+95th percentile等を使う場合もimplementation conventionとして明示し、`Huang replication`とは呼びません。
+両methodはresult labelとmetadataで区別します。
 
 このcontractを文書化してfreezeした後にだけ実装を開始し、fixtureでnull、residual、Rademacher、
 pairs resampling、statistic、p-valueを検証します。
@@ -298,10 +399,12 @@ plain asymptotic t-valueだけをprimary conclusionにしません。
 # 5. General Inference Policy
 
 Practical symbol-level analysisではmonthly serial dependenceを考慮したHAC/Newey-West系CIを使用し、lag defaultは12 monthsとします。
+M1A symbol-level continuous/sign regressionではこれをprimary inferenceとします。
 
-pooled / cross-marketではcalendar-time dependenceとsymbol dependenceを無視しません。
+M1A pooled regressionのprimary inferenceはcalendar-month clustered standard errorsです。cluster unitは
+calendar monthです。
 
-補助分析として、
+M1A pooledの補助分析として、
 
 - two-way clustered SE（symbol × calendar month）
 - calendar-month block bootstrap
@@ -337,6 +440,17 @@ factor return seriesが確認できた場合、最低限:
 - volatility
 - Sharpe
 - cumulative-return path
+
+に加えて、次をmetadataへ記録します。
+
+- return unit conversion
+- frequency-specific annualization factor
+- Sharpe calculation convention
+- missing-value handling
+
+annualization factorはreference workbookをinventoryしてfrequencyを確定した後に選び、実装者の
+暗黙選択にしません。monthly factor returnならmonthly frequencyに適合するannualization conventionを
+明記し、daily等の別frequencyとは混同しません。
 
 をreference reportへ出します。
 

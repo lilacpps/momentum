@@ -1,7 +1,7 @@
 # M2 — Practical Monthly Comparator
 
 ## Status
-Ready after M1A Practical Predictability. M1B MOP Regression Comparator and M1C Huang
+Ready after M1A Practical Predictability is complete. M1B MOP Regression Comparator and M1C Huang
 Reference Challenge may remain pending without blocking this Practical Track milestone.
 
 ## 目的

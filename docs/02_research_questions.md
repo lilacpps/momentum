@@ -23,9 +23,10 @@ M0のdaily PnLだけを答えにしない。
 
 M1を少なくとも次の3 workstreamに分ける。
 
-- M1A Practical Predictability: Track B split / universe freeze後に実行
+- M1A Practical Predictability: `docs/04_validation_policy.md`のvalid Track B concrete freeze artifact後に実行
 - M1B MOP Regression Comparator: eligible reference underlying data確認後に実行
-- M1C-Huang-reference / M1C-Huang-practical-analogue: methodology contract freeze後、各data gateに応じて実行
+- M1C-Huang-reference / M1C-Huang-practical-analogue: `docs/07_academic_validation_spec.md`のmethodology
+  contract freeze後、各data gateに応じて実行
 
 ### Academic Track
 
@@ -147,6 +148,9 @@ M1 Reference Comparatorで、
 - pooled panel regression
 - lags `h=1...60 months`
 - monthly calendar-time clustering
+
+M1Bのcanonical equation、M1Aのcalendar-month/missing/zero semantics、Huang reference inferenceは
+`docs/07_academic_validation_spec.md`をauthoritative sourceとする。
 
 をMOP methodology comparatorとして実装する。
 

@@ -6,7 +6,7 @@
 | Milestone | File | Status |
 |---|---|---|
 | M0 | `M0_engine_correctness.md` | Ready |
-| M1 | `M1_academic_hypothesis.md` | M1A ready after Track B split/universe freeze; M1B after eligible underlying; M1C-reference after reference underlying + contract; M1C-practical after Track B data + contract |
+| M1 | `M1_academic_hypothesis.md` | M1A ready after valid Track B concrete freeze artifact; AQR sanity independent; M1B after eligible underlying; M1C-reference after reference underlying + contract; M1C-practical after Track B data + contract |
 | M2 | `M2_academic_comparator.md` | Ready after M1A Practical Predictability; M1B/M1C may remain pending |
 | M3 | `M3_multi_symbol.md` | High-level ready after TSH exact historical-mean contract freeze before M3 |
 | M4 | `M4_portfolio.md` | Needs final alignment rules |

@@ -188,14 +188,19 @@ current swapの過去一律適用は原則避けます。
 - golden tests
 - causality
 - accounting
-- engine correctness確定後のTrack B split/universe freeze
+- engine correctness確定後の`docs/04_validation_policy.md`に従ったTrack B concrete freeze artifact
 - freeze前はstructural validationのみ、freeze後に初めてhistorical gross performance
 
 ## Gate M1
-- M1A Practical: Track B split/universe freeze後
+- M1A Practical: `docs/04_validation_policy.md`のvalid Track B concrete freeze artifact後
+- AQR Reference Sanity: eligible MOP underlying dataとは独立
 - M1B MOP comparator: eligible reference underlying data identified
 - M1C-Huang-reference: Huang contract freeze + eligible reference underlying data
 - M1C-Huang-practical-analogue: Huang contract freeze + Track B data
+
+M1A completeでM2をunblockします。M1B/M1CのpendingはM2をblockしません。M1/M2のnormative
+methodology、M1Aのcalendar-month/zero/missing/inference、M1B equation、Huang procedureは
+`docs/07_academic_validation_spec.md`を参照します。
 - Academic / Practical tracks separated
 - uncertainty
 

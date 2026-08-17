@@ -25,8 +25,10 @@ profitability gating / multi-symbol / portfolio / vol scaling / costs / optimiza
 
 ### Gate
 M0 implementation後、golden fixture / synthetic data / unit testsでengine correctnessを確定する。
-その後、実historical performanceを生成する前にTrack Bのdevelopment / validation / final holdout /
-symbol universeをfreezeする。freeze前の実データ利用はstructural validationだけに限定する。
+その後、実historical performanceを生成する前に、`docs/04_validation_policy.md`に従ってTrack Bの
+concrete freeze artifactを保存する。freeze時期・artifact versioningは`docs/04`、data source /
+price type / timezone / daily boundaryの意味は`docs/03`、M1 methodologyは`docs/07`を参照する。
+freeze前の実データ利用はstructural validationだけに限定する。
 Track Aのpublished replication sampleは別管理。
 
 ---
@@ -66,6 +68,11 @@ strategy engineとは別にpredictabilityを直接確認し、MOPのregression m
 
 M1C challenge module開始前に、`docs/07_academic_validation_spec.md`のHuang bootstrap contractをfreezeする。
 paper-explicitとimplementation conventionを分離し、freeze後に実装する。
+
+M1Aはvalid Track B concrete freeze artifact後にReady、AQR Reference Sanityはeligible MOP underlying
+dataとは独立してReadyです。M1Bはeligible reference underlying dataが識別されるまでpendingとし、
+M1C-referenceはHuang contractとeligible reference data、M1C-practical-analogueはHuang contractと
+Track B dataを要求します。M1B/M1CのpendingはM2をblockしません。normative detailは`docs/07`に集約します。
 
 ### 成果
 

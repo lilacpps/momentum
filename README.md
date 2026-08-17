@@ -80,17 +80,22 @@ Track Aでは、
 - financing dataがあればbroker-net評価
 
 Track Bでは、M0 implementation後にgolden fixture / synthetic data / unit testsでengine correctnessを確定し、
-実historical performanceを一件も見る前に
+実historical performanceを一件も見る前に、`docs/04_validation_policy.md` §1の
+Track B freeze gateに従って、次の値を具体的にfreezeします。
 
 - development
 - validation
 - final holdout
 - symbol universe
 - data source
+- price type
 - timezone
 - daily boundary
 
-をfreezeします。freeze前の実データ利用はschema/timestamp等のstructural validationに限り、
+をfreezeします。freezeした具体値は、machine-readableまたはversion-controlledなfreeze artifactとして保存します。
+artifactの必須項目・保存時期・version policyは`docs/04_validation_policy.md`がauthoritativeであり、
+data source / price type / timezone / daily boundaryの意味とデータ契約は
+`docs/03_data_and_costs.md`がauthoritativeです。freeze前の実データ利用はschema/timestamp等のstructural validationに限り、
 performance / PnL / predictive resultは見ません。freeze後に初めてhistorical gross resultを生成します。
 final holdoutはM7まで原則見ません。
 
@@ -135,11 +140,12 @@ Practical Trackのtarget volatilityは別実験として扱います。
 
 TSHのhistorical-mean definitionは `references/7.Time-series momentum_ Is it there_.pdf` の式・sample conventionを実装前に固定し、
 論文仕様とcausal expanding-history analogueが異なる場合は**別出力**にします。
-Huang bootstrapはchallenge module開始前にpaperからcontractをfreezeし、その後に実装します。
+Huang bootstrapはM1C開始前にpaperからcontractをfreezeし、その後に実装します。
 
 ### M1 workstream status
 
-- M1A Practical Predictability: `Ready after Track B split / universe freeze`
+- M1A Practical Predictability: `Ready after valid Track B concrete freeze artifact`
+- AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`
 - M1C-Huang-practical-analogue: `Ready after Huang methodology contract freeze and Track B data`
@@ -198,5 +204,6 @@ M9  1h Momentum
 M0の仕様は変更していません。
 **M0は現時点で実装開始可能です。**
 
-M1開始前には、Track B freezeに加えてHuang bootstrap contractをfreezeします。TSH exact historical-mean
-contractはM3開始前にfreezeし、M3/M4/M7で再利用します。
+M1A開始前にはTrack Bの具体的freeze artifactが必要です。Huang methodology/bootstrap contractは
+M1C開始前にfreezeします。Huang contract未freezeを理由にM1Aを停止しません。
+TSH exact historical-mean contractはM3開始前にfreezeし、M3/M4/M7で再利用します。

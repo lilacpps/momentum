@@ -18,6 +18,10 @@ single-symbol Daily OHLCを基本とします。
 
 data sourceごとに、timestampがbar openかcloseか / timezone / daily session boundary / source / price type をmetadataへ記録します。
 
+`data_source`、`price_type`、`timezone`、`daily_bar_boundary`（daily session boundary）の意味、許容値、
+検証方法は本章のdata contractをauthoritative sourceとします。これらはTrack B freeze artifactにも
+記録しますが、freezeの時期・artifact versioning・gateは`docs/04_validation_policy.md`が定義します。
+
 ## Ordering
 
 timestamp ascendingを必須とします。
@@ -83,6 +87,11 @@ next_1m_return[M]  = month_end_price[M+1] / month_end_price[M] - 1
 ```
 
 これは統計的predictability用であり、tradable next-open PnLとは別です。
+
+calendar monthにvalid Closeが存在しない場合は補間せず、必要なM1 observationをunavailableとします。
+forward-fill、backward-fill、zero-fill、nearest-month substitutionは禁止です。観測の欠損・除外数は
+diagnostics metadataへ記録し、calendar monthとobserved rowを同一視しません。詳細なM1 methodologyは
+`docs/07_academic_validation_spec.md`がauthoritativeです。
 
 M2のexecutionは `docs/07_academic_validation_spec.md` に従います。
 
