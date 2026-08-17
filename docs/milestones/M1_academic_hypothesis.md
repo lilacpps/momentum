@@ -21,7 +21,7 @@ strategy PnLとは別にTSMOMのpredictive relationを直接検証し、MOPのre
 
 ## 前提
 M0完了済み。
-Track BについてM1結果を見る前に、`docs/04_validation_policy.md`に従ったconcrete freeze artifactを
+Track BについてM1結果を見る前に、`config/research_track_b.yaml`としてconcrete freeze artifactを
 保存済みとする。artifactの時期・version policyは`docs/04`、data source / price type / timezone /
 daily boundaryの意味は`docs/03`、M1 methodologyは`docs/07`をauthoritative sourceとする。
 Track A published sampleはreplication sampleとして別管理。
@@ -176,9 +176,7 @@ M1全体がcompleteでなくても、M1AがcompleteならM2をunblockする。M1
 ## Human decisions still required
 
 M1A開始前:
-- Track B development / validation / final holdout periods
-- Track B symbol universe
-- Track B data source / price type / timezone / daily boundary
+- Track B v1 freeze artifact is present and unchanged
 
 M1C開始前:
 - Huang bootstrap contract freeze（null / regression / residual / Rademacher / pairs / T_i convention /

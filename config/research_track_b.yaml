@@ -1,0 +1,57 @@
+freeze_version: 1
+freeze_date: "2026-08-17"
+
+warmup_data_start: "2015-01"
+
+development_period:
+  start: "2017-01"
+  end: "2021-12"
+
+validation_period:
+  start: "2022-01"
+  end: "2023-12"
+
+final_holdout_period:
+  start: "2024-01"
+  end: "2026-06"
+
+split_assignment:
+  basis: next_1m_return_outcome_month
+
+symbol_universe:
+  primary:
+    - XAUUSD
+    - EURUSD
+    - GBPUSD
+    - USDJPY
+    - AUDUSD
+    - NZDUSD
+    - USDCAD
+    - USDCHF
+
+  secondary_cross_robustness:
+    - EURJPY
+    - GBPJPY
+    - EURGBP
+    - AUDJPY
+
+data_source: exness_mt5_tick
+price_type: bid
+timezone: UTC
+
+daily_bar_boundary:
+  convention: new_york_17_close
+  winter_utc: "22:00"
+  summer_utc: "21:00"
+  dst_rule: US_DST
+
+previous_freeze_version: null
+status: frozen
+
+notes: >-
+  Source is Exness MT5 tick data. OHLC is constructed from Bid ticks.
+  The warmup period is used only for predictor formation and state
+  initialization and is excluded from Development, Validation, and Final
+  Holdout evaluation samples. The primary and secondary universes are
+  pre-specified and are not exchanged based on performance results. Final
+  Holdout predictive and performance results are not viewed until M7.

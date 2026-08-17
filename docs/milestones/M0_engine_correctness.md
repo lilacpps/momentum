@@ -98,11 +98,14 @@ M0の合否はprofitabilityではなく **engine correctness** で判定する�
 golden fixture / synthetic data / unit testsでengine correctnessを確定した後、かつ実historical
 performanceを生成する前に、Track Bについて以下をfreezeする。
 
+具体的なv1 valuesとartifactは`config/research_track_b.yaml`、freeze timingとversion policyは
+`docs/04_validation_policy.md`を参照する。
+
 - development period
 - validation period
 - final holdout period
 - symbol universe
-- data source / timezone / daily boundary
+- data source / price type / timezone / daily boundary
 
 freeze前の実データ利用はschema/timestamp等のstructural validationに限定し、performanceやpredictive
 resultを見ない。freeze後に初めてhistorical gross resultを生成する。

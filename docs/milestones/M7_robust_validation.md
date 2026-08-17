@@ -17,7 +17,7 @@ and TSH exact reference convention is frozen before M3; neither is deferred to M
 
 ## 前提
 Track Bについて、historical performanceを生成する前に`docs/04_validation_policy.md`のconcrete
-freeze artifactが保存済み。artifactのfreeze/version policyは`docs/04`、data contractは`docs/03`、
+freeze artifact（`config/research_track_b.yaml`）が保存済み。artifactのfreeze/version policyは`docs/04`、data contractは`docs/03`、
 M1 methodologyは`docs/07`に従う。
 Track A published sampleはreplication sampleとして分離。
 

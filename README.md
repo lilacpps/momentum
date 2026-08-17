@@ -99,6 +99,10 @@ data source / price type / timezone / daily boundaryの意味とデータ契約�
 performance / PnL / predictive resultは見ません。freeze後に初めてhistorical gross resultを生成します。
 final holdoutはM7まで原則見ません。
 
+Track B v1の具体的freeze valuesは、version-controlled artifact
+`config/research_track_b.yaml`をsource of truthとします。freeze/split/warmup/version policyは
+`docs/04_validation_policy.md`、data contractは`docs/03_data_and_costs.md`を参照します。
+
 Track AとTrack Bを「論文再現」という同じラベルで混ぜません。
 
 ---

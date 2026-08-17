@@ -66,6 +66,10 @@ daily boundary
 
 Track Aのpublished replication sampleは既知のreference sampleなので、このfinal holdoutには含めません。
 
+Track B v1のmachine-readable freeze artifactは`config/research_track_b.yaml`です。
+このartifactがTrack Bの具体値のsource of truthであり、本文書はfreeze timing、split assignment、
+warmup、version policyを定義します。
+
 ### Track B freeze artifact contract
 
 Track Bのhistorical predictive/performance analysisを開始する前に、freezeされた具体値を
@@ -98,6 +102,32 @@ notes
 - 新versionには少なくとも`freeze_date`、`freeze_version`、変更理由、変更対象、旧versionとの関係を記録します。
 - 既に開始したanalysisの結果へ新versionを遡及適用せず、各analysisが使用したfreeze versionをmetadataへ記録します。
 - version変更がanalysis sampleや解釈に影響する場合は、旧version結果を破棄・上書きせず、変更理由と再分析範囲を別途記録します。
+
+### Track B v1 split and warmup semantics
+
+`split_assignment.basis`は`next_1m_return_outcome_month`です。M1A observationのsplit所属は
+predictor formation monthではなく、next-month returnのoutcome monthで決めます。例えばformation
+monthが`2023-12`、next-1m outcome monthが`2024-01`なら、そのobservationはFinal Holdoutに所属します。
+split境界をまたぐfuture returnを直前splitへ混入させません。
+
+`warmup_data_start`の`2015-01`はDevelopment開始ではありません。これはDevelopment開始時点から
+past-12-month return等のcausal predictorを作成し、必要なstateを初期化するためのpre-sample historyです。
+warmup observationsはDevelopment / Validation / Final Holdoutの評価sampleに含めず、predictor formation
+とstate initializationだけに利用します。future informationは利用せず、split assignmentは常にoutcome
+monthで決定します。実データの取得対象は`2015-01`から`2026-06`までです。
+
+### Track B v1 universe policy
+
+`config/research_track_b.yaml`のprimary universeと`secondary_cross_robustness` universeは、freeze v1時点で
+事前指定された役割です。performance結果を見てprimaryからsymbolを除外したり、secondaryから好調symbolだけを
+追加したり、両universeを入れ替えたりしません。
+
+ただしhistorical predictive/performance resultを見る前のstructural validationで、coverage不足、timestamp
+corruption、duplicate / missing dataの重大問題、source consistency failure、Bid tick dataとして不成立、
+その他客観的なdata-quality failureが判明した場合は、既存versionをin-place変更せず、理由を記録した新しい
+freeze versionで変更します。
+
+Final HoldoutはM7までpredictive/performance resultを閲覧しません。
 
 ## M1 — Academic Hypothesis + Statistical Challenge
 
