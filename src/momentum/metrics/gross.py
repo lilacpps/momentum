@@ -9,25 +9,41 @@ def gross_metrics(
     ledger: pd.DataFrame,
     bars: pd.DataFrame,
     *,
-    return_mask: pd.Series | None = None,
+    sample_start: pd.Timestamp | None = None,
+    sample_end: pd.Timestamp | None = None,
 ) -> dict[str, Any]:
-    """Return gross metrics shared by M0 and M2 daily accounting.
+    """Return gross metrics for the full path or one causal sample window.
 
-    ``bars`` must contain daily Open-to-Open strategy returns and the executed
-    position.  Drawdown is intentionally calculated at daily frequency so a
-    monthly signal does not change the comparison frequency.
+    With a sample window, returns use ``[sample_start, sample_end)`` while
+    execution events use ``[sample_start, sample_end]`` so an exit at the
+    terminal boundary is counted without adding a post-boundary return.
     """
+    if (sample_start is None) != (sample_end is None):
+        raise ValueError("sample_start and sample_end must be provided together")
+    windowed = sample_start is not None
+    if windowed and sample_start >= sample_end:
+        raise ValueError("sample_start must be before sample_end")
+
+    timestamps = pd.to_datetime(bars["timestamp"]) if "timestamp" in bars else pd.Series(dtype="datetime64[ns]")
+    if windowed:
+        return_window_mask = (timestamps >= sample_start) & (timestamps < sample_end)
+        event_mask = (timestamps >= sample_start) & (timestamps <= sample_end)
+    else:
+        return_window_mask = pd.Series(True, index=bars.index)
+        event_mask = return_window_mask
+
     if "strategy_return" in bars:
-        strategy_source = bars["strategy_return"]
-        if return_mask is not None:
-            strategy_source = strategy_source.loc[return_mask]
-        strategy = strategy_source.dropna()
+        strategy = bars.loc[return_window_mask, "strategy_return"].dropna()
     else:
         strategy = pd.Series(dtype="float64")
     cumulative = float((1.0 + strategy).prod() - 1.0) if len(strategy) else 0.0
-    closed = int(ledger["status"].eq("closed").sum()) if len(ledger) else 0
-    opened = int(ledger["status"].eq("open").sum()) if len(ledger) else 0
-    equity = (1.0 + strategy).cumprod() if len(strategy) else pd.Series(dtype="float64")
+    if len(strategy):
+        equity = pd.concat([
+            pd.Series([1.0], dtype="float64"),
+            (1.0 + strategy).cumprod().reset_index(drop=True),
+        ], ignore_index=True)
+    else:
+        equity = pd.Series([1.0], dtype="float64")
     if len(equity):
         max_drawdown = float((equity / equity.cummax() - 1.0).min())
     else:
@@ -36,40 +52,95 @@ def gross_metrics(
     if "executed_position" in bars and len(bars):
         positions = bars["executed_position"].fillna(0).astype(int)
         previous = positions.shift(1, fill_value=0)
-        changes = positions.ne(previous)
-        turnover = float((positions - previous).abs().sum())
+        changes = positions.ne(previous) & event_mask
+        turnover = float((positions.loc[event_mask] - previous.loc[event_mask]).abs().sum())
         position_change_events = int(changes.sum())
     else:
+        positions = pd.Series(dtype="int64")
+        previous = pd.Series(dtype="int64")
         turnover = 0.0
         position_change_events = 0
 
-    closed_episodes = ledger.loc[ledger["status"].eq("closed")].copy() if len(ledger) else ledger.copy()
+    if len(ledger):
+        entry_timestamps = pd.to_datetime(ledger["entry_timestamp"])
+        exit_timestamps = pd.to_datetime(ledger["exit_timestamp"])
+    else:
+        entry_timestamps = pd.Series(dtype="datetime64[ns]")
+        exit_timestamps = pd.Series(dtype="datetime64[ns]")
+
+    if windowed:
+        started = (entry_timestamps >= sample_start) & (entry_timestamps < sample_end)
+        active_at_start = (entry_timestamps < sample_start) & (
+            exit_timestamps.isna() | (exit_timestamps >= sample_start)
+        )
+        active_after_end = (entry_timestamps < sample_end) & (
+            exit_timestamps.isna() | (exit_timestamps > sample_end)
+        )
+        metric_ledger = ledger.loc[started]
+        closed = int((started & exit_timestamps.notna() & (exit_timestamps <= sample_end)).sum())
+        opened = int((started & (exit_timestamps.isna() | (exit_timestamps > sample_end))).sum())
+        carry_in_count = int(active_at_start.sum())
+        carry_out_count = int(active_after_end.sum())
+    else:
+        started = pd.Series(True, index=ledger.index)
+        active_at_start = pd.Series(False, index=ledger.index)
+        active_after_end = pd.Series(False, index=ledger.index)
+        metric_ledger = ledger
+        closed = int(ledger["status"].eq("closed").sum()) if len(ledger) else 0
+        opened = int(ledger["status"].eq("open").sum()) if len(ledger) else 0
+        carry_in_count = 0
+        carry_out_count = 0
+
+    if len(metric_ledger):
+        metric_entries = pd.to_datetime(metric_ledger["entry_timestamp"])
+        metric_exits = pd.to_datetime(metric_ledger["exit_timestamp"])
+        if windowed:
+            closed_mask = (
+                metric_ledger["status"].eq("closed")
+                & metric_exits.notna()
+                & (metric_entries >= sample_start)
+                & (metric_entries < sample_end)
+                & (metric_exits <= sample_end)
+            )
+        else:
+            closed_mask = metric_ledger["status"].eq("closed")
+        closed_episodes = metric_ledger.loc[closed_mask].copy()
+    else:
+        closed_episodes = metric_ledger.copy()
     interval_holdings: list[int] = []
     calendar_holdings: list[float] = []
     if len(closed_episodes) and "timestamp" in bars:
-        timestamps = pd.Series(bars["timestamp"].tolist())
+        timestamp_values = pd.Series(pd.to_datetime(bars["timestamp"]).tolist())
         for row in closed_episodes.itertuples(index=False):
-            entry = timestamps[timestamps == row.entry_timestamp]
-            exit_ = timestamps[timestamps == row.exit_timestamp]
-            if len(entry) and len(exit_):
-                entry_index = int(entry.index[0])
-                exit_index = int(exit_.index[0])
-                interval_holdings.append(max(0, exit_index - entry_index))
-                delta = row.exit_timestamp - row.entry_timestamp
+            entry_timestamp = pd.Timestamp(row.entry_timestamp)
+            exit_timestamp = pd.Timestamp(row.exit_timestamp)
+            if windowed:
+                entry_timestamp = max(entry_timestamp, pd.Timestamp(sample_start))
+            intervals = ((timestamp_values >= entry_timestamp) & (timestamp_values < exit_timestamp)).sum()
+            interval_holdings.append(int(intervals))
+            delta = exit_timestamp - entry_timestamp
+            if delta >= pd.Timedelta(0):
                 calendar_holdings.append(float(delta.total_seconds() / 86400.0))
 
     reversal_count = int(
-        ledger["reversal_from_episode_id"].notna().sum()
-    ) if len(ledger) and "reversal_from_episode_id" in ledger else 0
+        (event_mask & bars["reversal_from_episode_id"].notna()).sum()
+    ) if len(bars) and "reversal_from_episode_id" in bars else 0
     reversal_frequency = (
         float(reversal_count / position_change_events)
         if position_change_events else None
     )
 
+    if windowed and len(positions):
+        carry_in_position = int(previous.loc[event_mask].iloc[0]) if event_mask.any() else 0
+        carry_out_position = int(positions.loc[event_mask].iloc[-1]) if event_mask.any() else 0
+    else:
+        carry_in_position = 0
+        carry_out_position = 0
+
     return {
         "cumulative_gross_return": cumulative,
         "gross_return": cumulative,
-        "trade_count": int(len(ledger)),
+        "trade_count": int(len(metric_ledger)) if windowed else int(len(ledger)),
         "closed_trade_count": closed,
         "open_trade_count": opened,
         "return_count": int(len(strategy)),
@@ -82,4 +153,8 @@ def gross_metrics(
         "average_holding_calendar_days": float(sum(calendar_holdings) / len(calendar_holdings)) if calendar_holdings else None,
         "reversal_count": reversal_count,
         "reversal_frequency": reversal_frequency,
+        "carry_in_episode_count": carry_in_count,
+        "carry_in_position": carry_in_position,
+        "carry_out_episode_count": carry_out_count,
+        "carry_out_position": carry_out_position,
     }

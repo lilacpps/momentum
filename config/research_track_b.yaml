@@ -17,7 +17,6 @@ final_holdout_period:
 
 split_assignment:
   basis: next_1m_return_outcome_month
-  m2_basis: holding_month
 
 symbol_universe:
   primary:

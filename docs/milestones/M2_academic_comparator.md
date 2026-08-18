@@ -53,6 +53,9 @@ diagnosticsを扱う。
 
 M0とM2のgross return、drawdown、turnover、holding等は、同じreturn intervalだけで再計算して比較する。
 Development+Validationなら、両者ともholding month `2017-01`〜`2023-12`に限定する。
+warmupからのcausal stateは維持するが、window外で開始したcarry-in episodeはtrade count / average holdingへ
+含めず、carry-in / carry-outをdiagnosticとして別記録する。return windowは終了境界を含まず、event windowは
+終了境界Openを含む。
 
 ### Missing month handling
 

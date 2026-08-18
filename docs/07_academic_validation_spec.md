@@ -736,6 +736,10 @@ M2は月次PnLを別engineで計算しません。M0と共有するdaily Open-to
 holding month内のdaily strategy returnsをcompoundします。これにより、月内daily returnのcompoundは
 `first Open of M+1`から`first Open of M+2`までのmonthly gross returnと一致し、M0とdaily drawdownを比較できます。
 
+M2 target stateは`warmup_data_start`からcausalに構築し、Development開始時にFlatへresetしません。
+M2の最初のformable holding monthは`warmup_data_start + 13 calendar months`です。pre-sample historyが
+不足するholding monthはsignal undefined / Flatとし、stateを人工的に補完しません。
+
 ## 7.4 State and universe
 
 ```text
@@ -775,6 +779,12 @@ M2 production entry pointは、current Track B freeze artifact、matching
 M1Aと同じfingerprint gateを使い、別dataset、別freeze version、別structural spec version、別fingerprint
 algorithmでは実行しません。各symbolはfrozen primary universeから事前に選択し、resultをpooledにしません。
 
+公開production entry point `run_m2_track_b(..., symbol=...)`はDevelopment+Validation専用です。
+`include_holdout`のようなholdout escape hatchは持ちません。fingerprint検証後のbacktest inputは、
+warmup開始からValidation終了翌月のfirst Openまでにtruncateし、current freezeでは`2024-01`のfirst
+Openより後のbar、asset return、Final Holdout resultを生成・返却しません。M7用のFinal Holdout entry pointは
+この契約とは別に設計します。
+
 最低限、result metadataは次を持ちます。
 
 ```text
@@ -796,15 +806,18 @@ academic_mop_replication = false
 
 ## 7.8 Metric definitions
 
-`gross_return`は比較対象return interval内のdaily strategy returnsをcompoundしたものです。
-`max_drawdown`は同じdaily Open-to-Open equity curveから計算し、`equity / prior_peak - 1`の最小値として
-負の値で報告します。
+`gross_return`はreturn window `[sample_start, sample_end)` 内のdaily strategy returnsをcompoundしたものです。
+`max_drawdown`は同じdaily Open-to-Open equity curveから計算し、初期equity `1.0`をpeakへ含めた
+`equity / prior_peak - 1`の最小値として負の値で報告します。
 
 `turnover[t] = abs(new_position[t] - old_position[t])`とし、Flat→Longは1、Long→Shortは2です。
-`trade_count`はledgerのposition episode数です。`average_holding`はclosed episodeのholding daily-return
-interval数の平均とし、calendar days平均はdiagnosticとして併記します。
-`reversal_count`はLong→ShortまたはShort→Longの回数、`reversal_frequency`は
-`reversal_count / position-change event count`です。分母が0の場合はundefinedとします。
+event windowは`[sample_start, sample_end]`とし、終了境界Openでのexit/reversalを含めます。
+`trade_count`はevent window内に新規開始したnon-flat episode数です。window外で開始したcarry-in episodeは
+trade countへ含めません。`average_holding`はevent window内にentryし、終了境界までにcloseしたepisodeの
+holding daily-return interval数の平均とし、calendar days平均はdiagnosticとして併記します。
+`reversal_count`はevent window内のLong→ShortまたはShort→Longの回数、`reversal_frequency`は
+同じwindow内の`reversal_count / position-change event count`です。分母が0の場合はundefinedとします。
+carry-in / carry-out episode countとpositionはdiagnosticとして別記録します。
 
 成果物にはsignal-direction agreement、turnover、trade count、average holding、gross return、
 max drawdown、reversal frequencyを含めます。

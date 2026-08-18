@@ -116,16 +116,21 @@ split境界をまたぐfuture returnを直前splitへ混入させません。
 
 M2では同じcalendar monthをposition/PnLの用語で`holding_month`と呼び、split assignmentも
 `holding_month`で行います。すなわちM2の`formation_month = M`、`holding_month = M+1`であり、
-M1Aのoutcome-month assignmentと境界は同じです。current v3 artifactの機械可読なbasis名はM1Aとの
-互換性のため維持し、M2のnormative名称だけを`holding_month`として固定します。
+M1Aのoutcome-month assignmentと境界は同じです。このM2名称は`docs/07`のimplementation convention
+で固定し、既にM1Aに使用したfreeze v3 YAMLへM2専用fieldを追加しません。
 
 `warmup_data_start`の`2015-09`はDevelopment開始ではありません。これはDevelopment開始時点から
 past-12-month return等のcausal predictorを作成し、必要なstateを初期化するためのpre-sample historyです。
-warmup observationsはDevelopment / Validation / Final Holdoutの評価sampleに含めず、predictor formation
-とstate initializationだけに利用します。最初のDevelopment outcome `2017-01`はformation month
+warmup observationsはDevelopment / Validation / Final Holdoutのreturn評価sampleには含めませんが、
+predictor formationとcausal target state initializationには利用します。最初のDevelopment outcome `2017-01`はformation month
 `2016-12`のpast-12m price `2015-12`を必要とするため、`2015-09`開始でもDevelopment sampleは失われません。
 future informationは利用せず、split assignmentは常にoutcome monthで決定します。実データの取得対象は
 `2015-09`から`2026-06`までです。
+
+M2のevent metricsもDevelopment開始時にFlatへresetせず、warmupから連続したposition stateを使います。
+ただしM0/M2の比較metricsは、return window `[sample_start, sample_end)` と event window
+`[sample_start, sample_end]`を明示して再計算します。window外で開始したcarry-in episodeはtrade countと
+average holdingへ含めず、carry-in / carry-outはdiagnosticとして別記録します。
 
 ### Track B universe policy
 

@@ -102,7 +102,6 @@ def test_config_loader_validates_current_frozen_artifact(track_b_config):
         "This change is made before viewing Track B predictive or performance results."
     )
     assert track_b_config.split_assignment_basis == "next_1m_return_outcome_month"
-    assert track_b_config.raw["split_assignment"]["m2_basis"] == "holding_month"
     assert track_b_config.boundary_timezone == "UTC"
     assert "price_type" in track_b_config.raw
 

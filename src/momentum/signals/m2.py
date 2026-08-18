@@ -84,7 +84,12 @@ def generate_m2_signals(
     rebalance = pd.Series(False, index=frame.index, dtype=bool, name="rebalance")
     rows: list[dict[str, object]] = []
 
-    for holding_month in pd.period_range(start, end, freq="M"):
+    first_formable_holding_month = config.warmup_data_start + 13
+    for holding_month in pd.period_range(first_formable_holding_month, end, freq="M"):
+        if holding_month not in month_rows:
+            # A missing pre-sample holding month leaves no target row to
+            # construct.  Requested analysis months are checked above.
+            continue
         formation_month = holding_month - 1
         past_month = formation_month - 12
         if formation_month in month_end_close and past_month in month_end_close:

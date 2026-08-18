@@ -30,7 +30,6 @@ def run_m2_track_b(
     validation_summary: StructuralValidationSummary,
     *,
     symbol: str,
-    include_holdout: bool = False,
 ) -> BacktestResult:
     """Run M2 independently for one frozen primary symbol.
 
@@ -58,11 +57,27 @@ def run_m2_track_b(
         raise TrackBDailyValidationError(f"primary structural validation gate failed for {symbol}")
     if "symbol" not in daily.columns:
         raise TrackBDailyValidationError("M2 Track B input requires a symbol column")
-    selected = daily.loc[daily["symbol"].astype(str).eq(symbol)].copy().reset_index(drop=True)
-    if selected.empty:
+    selected_full = daily.loc[daily["symbol"].astype(str).eq(symbol)].copy().reset_index(drop=True)
+    if selected_full.empty:
         raise TrackBDailyValidationError(f"missing frozen primary symbol: {symbol}")
 
-    max_month = config.final_holdout.end if include_holdout else config.validation.end
+    max_month = config.validation.end
+    full_timestamp = selected_full["timestamp"]
+    if full_timestamp.dt.tz is not None:
+        full_calendar = full_timestamp.dt.tz_convert("UTC").dt.tz_localize(None).dt.to_period("M")
+    else:
+        full_calendar = full_timestamp.dt.to_period("M")
+    boundary_month = max_month + 1
+    boundary_rows = selected_full.loc[full_calendar == boundary_month]
+    if boundary_rows.empty:
+        raise TrackBDailyValidationError(
+            f"missing terminal execution boundary month: {boundary_month}"
+        )
+    boundary_timestamp = boundary_rows["timestamp"].iloc[0]
+    execution_mask = (full_calendar >= config.warmup_data_start) & (
+        selected_full["timestamp"] <= boundary_timestamp
+    )
+    selected = selected_full.loc[execution_mask].reset_index(drop=True)
     generated = generate_m2_signals(
         selected,
         config,
@@ -78,7 +93,7 @@ def run_m2_track_b(
         "dataset_fingerprint": validation_summary.dataset_fingerprint,
         "dataset_fingerprint_algorithm": validation_summary.dataset_fingerprint_algorithm,
         "symbol": symbol,
-        "split": "development+validation" if not include_holdout else "development+validation+final_holdout",
+        "split": "development+validation",
         "sample_period": f"{config.development.start}..{max_month}",
         "data_source": config.data_source,
         "price_type": config.price_type,
@@ -86,7 +101,7 @@ def run_m2_track_b(
         "daily_boundary": dict(config.daily_boundary),
         "result_level": "gross_price_only",
         "academic_mop_replication": False,
-        "final_holdout_included": include_holdout,
+        "final_holdout_included": False,
     }
     result = run_target_backtest(
         selected,
@@ -101,21 +116,22 @@ def run_m2_track_b(
         calendar = timestamp.dt.tz_convert("UTC").dt.tz_localize(None).dt.to_period("M")
     else:
         calendar = timestamp.dt.to_period("M")
-    boundary = max_month + 1
-    interval_mask = (
-        calendar >= config.development.start
-    ) & (calendar <= max_month)
-    boundary_present = (calendar == boundary).any()
-    if not boundary_present:
+    if not (calendar == boundary_month).any():
         raise TrackBDailyValidationError(
-            f"missing terminal execution boundary month: {boundary}"
+            f"missing terminal execution boundary month: {boundary_month}"
         )
+    sample_start = timestamp.loc[calendar == config.development.start].iloc[0]
     _, m0_target = generate_m0_signals(selected["close"])
-    comparable = generated.rebalance
+    comparable = generated.rebalance & (calendar >= config.development.start) & (calendar <= max_month)
     agreement = float(
         (m0_target.loc[comparable] == generated.target_position.loc[comparable]).mean()
     ) if comparable.any() else None
-    metrics = gross_metrics(result.ledger, bars, return_mask=interval_mask)
+    metrics = gross_metrics(
+        result.ledger,
+        bars,
+        sample_start=sample_start,
+        sample_end=boundary_timestamp,
+    )
     metrics["signal_direction_agreement"] = agreement
     return replace(result, bars=bars, metrics=metrics)
 
