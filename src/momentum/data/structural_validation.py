@@ -140,12 +140,12 @@ def _parse_timestamp(frame: pd.DataFrame, diagnostics: dict[str, Any]) -> pd.Dat
 
 
 def _validate_ohlc(frame: pd.DataFrame, diagnostics: dict[str, Any]) -> None:
-    invalid_count = 0
     numeric: dict[str, np.ndarray] = {}
+    invalid_cell = np.zeros(len(frame), dtype=bool)
     for column in ("open", "high", "low", "close"):
         values = pd.to_numeric(frame[column], errors="coerce").to_numpy(dtype="float64")
         numeric[column] = values
-        invalid_count += int((~np.isfinite(values) | (values <= 0)).sum())
+        invalid_cell |= ~np.isfinite(values) | (values <= 0)
     invariants = (
         (numeric["high"] >= numeric["open"])
         & (numeric["high"] >= numeric["close"])
@@ -153,9 +153,9 @@ def _validate_ohlc(frame: pd.DataFrame, diagnostics: dict[str, Any]) -> None:
         & (numeric["low"] <= numeric["close"])
         & (numeric["high"] >= numeric["low"])
     )
-    invalid_count += int((~invariants).sum())
-    diagnostics["nonfinite_or_invalid_ohlc_rows"] = invalid_count
-    if invalid_count:
+    invalid_row = invalid_cell | ~invariants
+    diagnostics["nonfinite_or_invalid_ohlc_rows"] = int(invalid_row.sum())
+    if invalid_row.any():
         raise StructuralValidationError("invalid_ohlc")
 
 

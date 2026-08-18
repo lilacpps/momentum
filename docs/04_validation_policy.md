@@ -166,6 +166,8 @@ Holdout期間は変更しない。
 実データloaderの既定パスは`data/processed/{SYMBOL}_1d.csv`。canonical minimum schemaは
 `timestamp, open, high, low, close`である。symbol列が無い場合はfile pathの`{SYMBOL}`から付与してよい。
 現行prepared exportの`datetime`はloader側で`timestamp`へ名前だけ正規化でき、`volume`等の追加列は無視する。
+timezone-naiveなCSV timestampはloader境界でUTC labelとして許可するが、canonical in-memory timestampは
+timezone-aware UTCへ統一する。
 bar labelの値・意味は変更せず、NY17 nominal-close timestampへの変換は要求しない。
 
 ### v2 fail-fast checks
@@ -177,6 +179,7 @@ bar labelの値・意味は変更せず、NY17 nominal-close timestampへの変�
 - timestamp ascending
 - duplicate timestampなし
 - OHLC numeric / finite / positive
+- `nonfinite_or_invalid_ohlc_rows`は異常cell数ではなく、異常を含むunique row数
 - `high >= open, close`、`low <= open, close`、`high >= low`
 - requested range filtering (`2015-01`〜`2026-06`、current artifact値)
 - requested UTC calendar monthがすべて少なくとも1本のDaily barを持つこと

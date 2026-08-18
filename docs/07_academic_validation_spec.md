@@ -36,11 +36,13 @@ versions are rejected. Timestamp serialization is a signed int64 count of
 nanoseconds since the Unix epoch after UTC canonicalization, independent of the
 input datetime dtype resolution.
 
-For real Track B v2 input, `timestamp` is the prepared Daily bar label and is
-interpreted as a UTC calendar timestamp. It need not represent the nominal
+For real Track B v2 input, `timestamp` is the prepared Daily bar label. A
+timezone-naive timestamp in the prepared CSV is accepted by the production
+loader and interpreted as a UTC label; the canonical in-memory `timestamp` is
+always timezone-aware UTC. It need not represent the nominal
 `America/New_York` 17:00 session close, and no NY17 conversion is performed.
-Calendar month identity is derived from the prepared timestamp's UTC calendar
-month. The private synthetic fixture path may still use timezone-naive values.
+Calendar month identity is derived from the canonical prepared timestamp's UTC
+calendar month.
 The v2 structural validator performs only minimal fail-fast checks and passes
 the same validated prepared Daily dataset to fingerprinting and M1A.
 
@@ -221,11 +223,12 @@ M1出力は、少なくとも`track`、`workstream`、`analysis_name`、`symbol`
 
 M1AのDaily input timestampはprepared OHLCのbar labelをauthorityとし、UTC calendar timestampとして扱います。
 calendar monthはそのtimestampのUTC calendar monthから決定し、NY17 nominal-close timestampへの変換は要求しません。
-timezone-naiveなsynthetic inputはテスト専用にUTCとして扱います。
+prepared CSV内のtimezone-naive labelはproduction loaderでUTCとして解釈し、canonical in-memory timestampはtimezone-aware UTCへ統一します。
 
-Real Track B requires timezone-aware UTC timestamps. Timezone-naive timestamps
-are accepted only by private synthetic fixtures; they are not normalized on the
-real-data path. The prepared timestamp need not be the nominal
+The production loader accepts timezone-aware timestamps and timezone-naive CSV
+labels. Naive labels are normalized to timezone-aware UTC at the loader
+boundary; downstream M1A receives only canonical timezone-aware UTC timestamps.
+The prepared timestamp need not be the nominal
 `America/New_York` 17:00 session close, and calendar month identity uses UTC.
 #### Covariance options
 

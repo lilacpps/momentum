@@ -105,6 +105,27 @@ def test_invalid_ohlc_fails_without_repair(tmp_path):
     assert "invalid_ohlc" in row["failure_reasons"]
 
 
+def test_production_loader_accepts_naive_csv_timestamp_as_utc_label(tmp_path):
+    naive = _daily_rows()
+    expected_first = naive["timestamp"].iloc[0]
+    naive["timestamp"] = naive["timestamp"].dt.tz_localize(None)
+    result = _run(tmp_path, naive)
+    timestamp = result.daily_ohlc["timestamp"]
+    assert isinstance(timestamp.dtype, pd.DatetimeTZDtype)
+    assert str(timestamp.dt.tz) == "UTC"
+    assert timestamp.iloc[0] == expected_first
+
+
+def test_ohlc_diagnostic_counts_unique_invalid_rows(tmp_path):
+    invalid = _daily_rows()
+    invalid.loc[1, "open"] = 0.0
+    invalid.loc[1, "high"] = float("nan")
+    invalid.loc[2, "high"] = invalid.loc[2, "low"] - 1.0
+    result = _run(tmp_path, _daily_rows(), primary=invalid)
+    row = result.symbol_diagnostics.loc[result.symbol_diagnostics["symbol"] == "XAUUSD"].iloc[0]
+    assert row["nonfinite_or_invalid_ohlc_rows"] == 2
+
+
 def test_missing_calendar_month_fails(tmp_path):
     result = _run(tmp_path, _daily_rows(months=("2020-01", "2020-03")))
     row = result.symbol_diagnostics.loc[result.symbol_diagnostics["symbol"] == "XAUUSD"].iloc[0]

@@ -46,8 +46,10 @@ timestamp,open,high,low,close
 `symbol` may be omitted and is attached from `{SYMBOL}` in the file path.
 The current prepared export uses `datetime` instead of `timestamp`; the
 loader treats that name as a source-column alias and passes the canonical
-`timestamp` column downstream. Optional columns such as `volume` are ignored.
-No timestamp or OHLC repair is performed.
+`timestamp` column downstream. Timezone-naive CSV labels are accepted and
+interpreted as UTC by the loader. The canonical in-memory `timestamp` is
+always timezone-aware UTC. Optional columns such as `volume` are ignored. No
+timestamp or OHLC repair is performed.
 
 `timestamp` is the prepared bar label, interpreted as a UTC calendar
 timestamp. It is not converted to a nominal NY17 close. Calendar month is
