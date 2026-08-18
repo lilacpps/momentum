@@ -195,6 +195,28 @@ def test_sample_window_events_exclude_carry_in_and_future_activity():
     assert metrics["carry_out_episode_count"] == 0
 
 
+def test_sample_end_reversal_counts_new_episode_and_carry_out_consistently():
+    data = pd.DataFrame({
+        "timestamp": pd.date_range("2020-01-01", periods=6, freq="D"),
+        "open": [100.0, 101.0, 102.0, 103.0, 104.0, 105.0],
+        "high": [101.0, 102.0, 103.0, 104.0, 105.0, 106.0],
+        "low": [99.0, 100.0, 101.0, 102.0, 103.0, 104.0],
+        "close": [100.0, 101.0, 102.0, 103.0, 104.0, 105.0],
+    })
+    result = run_target_backtest(data, pd.Series([1, 1, 1, 1, 1, -1]))
+    metrics = gross_metrics(
+        result.ledger,
+        result.bars,
+        sample_start=pd.Timestamp("2020-01-02"),
+        sample_end=pd.Timestamp("2020-01-06"),
+    )
+    assert metrics["turnover"] == 2.0
+    assert metrics["trade_count"] == 1
+    assert metrics["reversal_count"] == 1
+    assert metrics["carry_out_episode_count"] == 1
+    assert metrics["carry_out_position"] == -1
+
+
 def _track_b_fixture(config, end="2024-06"):
     rows = []
     periods = pd.period_range("2015-09", end, freq="M")

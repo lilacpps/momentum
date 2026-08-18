@@ -207,7 +207,13 @@ methodology、M1Aのcalendar-month/zero/missing/inference、M1B equation、Huang
 - uncertainty
 
 ## Gate M2
-- daily vs monthly implementation差
+- monthly 12-calendar-month formation / next-month first-Open execution verified
+- warmupからcausal state continuity verified
+- M0/M2 common evaluation window verified
+- Final Holdout sealed
+- frozen primary 8 symbols independently executed
+- signal agreement / turnover / trade count / holding / gross return / max DD / reversal frequency reported
+- differences attributable to documented daily-vs-monthly rules
 
 ## Gate M3/M4
 - symbol横断性

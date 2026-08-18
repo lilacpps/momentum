@@ -825,7 +825,7 @@ max drawdown、reversal frequencyを含めます。
 ## 7.9 Terminal boundary
 
 `evaluation_period_end = 2026-06`をM2で完全評価するには`2026-07`の最初のOpenが必要です。
-したがってM7前にFinal Holdoutの最後のholding monthを評価する場合は、評価期間外の終了境界データを
+したがってM7でFinal Holdoutの最後のholding monthを評価する場合は、評価期間外の終了境界データを
 `execution_boundary_data through first Open of 2026-07`として明示的に許可し、freeze metadataへ記録します。
 その境界データだけでは`holding_month = 2026-07`のposition / returnを生成しません。
 

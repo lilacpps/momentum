@@ -69,11 +69,11 @@ def gross_metrics(
         exit_timestamps = pd.Series(dtype="datetime64[ns]")
 
     if windowed:
-        started = (entry_timestamps >= sample_start) & (entry_timestamps < sample_end)
+        started = (entry_timestamps >= sample_start) & (entry_timestamps <= sample_end)
         active_at_start = (entry_timestamps < sample_start) & (
             exit_timestamps.isna() | (exit_timestamps >= sample_start)
         )
-        active_after_end = (entry_timestamps < sample_end) & (
+        active_after_end = (entry_timestamps <= sample_end) & (
             exit_timestamps.isna() | (exit_timestamps > sample_end)
         )
         metric_ledger = ledger.loc[started]
@@ -99,7 +99,7 @@ def gross_metrics(
                 metric_ledger["status"].eq("closed")
                 & metric_exits.notna()
                 & (metric_entries >= sample_start)
-                & (metric_entries < sample_end)
+                & (metric_entries <= sample_end)
                 & (metric_exits <= sample_end)
             )
         else:
