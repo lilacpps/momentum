@@ -172,6 +172,12 @@ bar labelの値・意味は変更せず、NY17 nominal-close timestampへの変�
 
 ### v2 fail-fast checks
 
+The validation order is: parse timestamps, filter to the requested UTC month
+range, then validate duplicate timestamps, ordering, and OHLC values. Thus
+parsed rows outside the frozen range are not part of structural validation
+authority or the fingerprint. A timestamp that cannot be parsed cannot be
+range-filtered and remains a failure.
+
 各symbolについて、次だけを確認する。
 
 - required columns

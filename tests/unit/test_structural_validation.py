@@ -135,12 +135,16 @@ def test_missing_calendar_month_fails(tmp_path):
 
 def test_range_outside_daily_is_excluded_from_fingerprint(tmp_path):
     inside = _daily_rows()
-    outside = _daily_rows(months=("2019-12", "2020-04"))
-    extended = pd.concat([outside.iloc[[0]], inside, outside.iloc[[1]]], ignore_index=True)
+    outside = _daily_rows(months=("2020-04", "2020-04"))
+    outside["open"] = outside["open"].astype(object)
+    outside.loc[0, "open"] = "not-a-number"
+    outside.loc[1, "high"] = outside.loc[1, "low"] - 1.0
+    extended = pd.concat([outside, inside], ignore_index=True)
     base = _run(tmp_path / "base", inside)
     extra = _run(tmp_path / "extra", extended)
     pd.testing.assert_frame_equal(base.daily_ohlc, extra.daily_ohlc)
     assert base.summary.dataset_fingerprint == extra.summary.dataset_fingerprint
+    assert set(extra.symbol_diagnostics["validation_status"]) == {"pass"}
 
 
 def test_fingerprint_identity_is_row_order_invariant(tmp_path):

@@ -177,14 +177,18 @@ def _validate_prepared_symbol(
     try:
         frame = _read_prepared_daily(path, symbol)
         frame = _parse_timestamp(frame, item)
+        frame = _filter_requested_range(frame, config)
         item["duplicate_timestamp_count"] = int(frame["timestamp"].duplicated().sum())
         if item["duplicate_timestamp_count"]:
             raise StructuralValidationError("duplicate_timestamp")
         item["out_of_order_detected"] = not frame["timestamp"].is_monotonic_increasing
         if item["out_of_order_detected"]:
             raise StructuralValidationError("timestamp_not_ascending")
+        # Normalize only requested rows. Values outside the authority range
+        # must not determine the in-memory dtype or downstream validation.
+        for column in ("open", "high", "low", "close"):
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
         _validate_ohlc(frame, item)
-        frame = _filter_requested_range(frame, config)
         item["daily_bar_count"] = len(frame)
         if not frame.empty:
             item["first_valid_timestamp"] = frame["timestamp"].iloc[0]
