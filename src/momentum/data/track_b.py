@@ -13,6 +13,7 @@ import pandas as pd
 
 from momentum.research.track_b_config import TrackBConfig
 from momentum.research.track_b_config import SUPPORTED_DATASET_FINGERPRINT_ALGORITHM
+from momentum.research.track_b_config import SUPPORTED_STRUCTURAL_SPEC_VERSION
 from momentum.research.track_b_config import StructuralValidationSummary
 from momentum.research.track_b_config import validate_m1a_real_data_gate
 
@@ -42,7 +43,13 @@ def compute_track_b_daily_fingerprint(data: pd.DataFrame) -> str:
     if str(frame["timestamp"].dt.tz) != "UTC":
         raise TrackBDailyValidationError("fingerprint requires UTC timestamps")
     symbols = frame["symbol"].astype(str)
-    timestamps = frame["timestamp"].dt.tz_convert("UTC").astype("int64")
+    timestamps = (
+        frame["timestamp"]
+        .dt.tz_convert("UTC")
+        .dt.tz_localize(None)
+        .astype("datetime64[ns]")
+        .astype("int64")
+    )
     numeric_columns = ("open", "high", "low", "close")
     for column in numeric_columns:
         if not pd.api.types.is_numeric_dtype(frame[column]):
@@ -290,8 +297,10 @@ def _build_track_b_monthly_observations(
         raise TrackBDailyValidationError(
             "unsupported structural validation dataset fingerprint algorithm"
         )
-    if not validation_summary.structural_spec_version:
-        raise TrackBDailyValidationError("structural_spec_version must be non-empty")
+    if validation_summary.structural_spec_version != SUPPORTED_STRUCTURAL_SPEC_VERSION:
+        raise TrackBDailyValidationError(
+            "unsupported structural validation spec version"
+        )
     try:
         dataset_fingerprint = compute_track_b_daily_fingerprint(data)
     except TrackBDailyValidationError:

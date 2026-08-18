@@ -28,6 +28,11 @@ freeze-version mismatch before producing an M1A result.
 Its structural-validation input is a `StructuralValidationSummary` containing
 `freeze_version`, `structural_spec_version`, `dataset_fingerprint`,
 `dataset_fingerprint_algorithm`, and `status_by_symbol`.
+The frozen structural specification identifier is
+`structural_spec_version = track-b-structural-v1`; other structural spec
+versions are rejected. Timestamp serialization is a signed int64 count of
+nanoseconds since the Unix epoch after UTC canonicalization, independent of the
+input datetime dtype resolution.
 
 For real Track B input, `timestamp` must be timezone-aware UTC and must represent
 the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is

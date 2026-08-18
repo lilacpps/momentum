@@ -18,6 +18,7 @@ from momentum.research.m1a import _run_m1a_synthetic
 from momentum.research import run_m1a_track_b
 from momentum.research.track_b_config import (
     SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
+    SUPPORTED_STRUCTURAL_SPEC_VERSION,
     StructuralValidationSummary,
     TrackBConfigError,
     load_track_b_config,
@@ -68,6 +69,7 @@ def _validation_summary(
     status_by_symbol: dict[str, str] | None = None,
     freeze_version: int | None = None,
     algorithm: str = SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
+    structural_spec_version: str = SUPPORTED_STRUCTURAL_SPEC_VERSION,
 ) -> StructuralValidationSummary:
     if status_by_symbol is None:
         status_by_symbol = {
@@ -76,7 +78,7 @@ def _validation_summary(
         }
     return StructuralValidationSummary(
         freeze_version=config.freeze_version if freeze_version is None else freeze_version,
-        structural_spec_version="track-b-structural-v1",
+        structural_spec_version=structural_spec_version,
         dataset_fingerprint=compute_track_b_daily_fingerprint(daily),
         dataset_fingerprint_algorithm=algorithm,
         status_by_symbol=status_by_symbol,
@@ -542,6 +544,28 @@ def test_track_b_summary_binds_daily_fingerprint_and_freeze(track_b_config):
             ),
             include_sensitivity=False,
         )
+    with pytest.raises(TrackBDailyValidationError, match="unsupported.*spec version"):
+        run_m1a_track_b(
+            data,
+            track_b_config,
+            _validation_summary(
+                track_b_config,
+                data,
+                status_by_symbol=statuses,
+                structural_spec_version="track-b-structural-v0",
+            ),
+            include_sensitivity=False,
+        )
+
+
+def test_daily_fingerprint_is_invariant_to_datetime_resolution(track_b_config):
+    data = _daily_fixture(start="2020-01", end="2020-03", symbols=("XAUUSD",))
+    nanosecond_data = data.copy()
+    microsecond_data = data.copy()
+    microsecond_data["timestamp"] = microsecond_data["timestamp"].astype("datetime64[us, UTC]")
+    assert compute_track_b_daily_fingerprint(nanosecond_data) == compute_track_b_daily_fingerprint(
+        microsecond_data
+    )
 
 
 def test_future_month_mutation_does_not_change_prior_observations(track_b_config):

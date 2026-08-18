@@ -11,6 +11,7 @@ import yaml
 
 VALID_STRUCTURAL_STATUSES = frozenset({"pass", "pass_with_warning"})
 SUPPORTED_DATASET_FINGERPRINT_ALGORITHM = "track-b-daily-sha256-v1"
+SUPPORTED_STRUCTURAL_SPEC_VERSION = "track-b-structural-v1"
 REQUIRED_TOP_LEVEL_FIELDS = (
     "freeze_version", "freeze_date", "warmup_data_start", "development_period",
     "validation_period", "final_holdout_period", "split_assignment", "symbol_universe",
