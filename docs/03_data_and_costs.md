@@ -24,10 +24,41 @@ data sourceごとに、timestampがbar openかcloseか / timezone / daily sessio
 検証方法は本章のdata contractをauthoritative sourceとします。これらはTrack B freeze artifactにも
 記録しますが、freezeの時期・artifact versioning・gateは`docs/04_validation_policy.md`が定義します。
 
+## Track B v2 prepared Daily contract
+
+Track B v2 uses already prepared Exness Bid OHLC as the research input
+authority. Prepared frequencies from 1m through 1w may exist, but M1A uses
+only the prepared 1d file directly. Momentum does not regenerate Daily bars
+from 1m data.
+
+The production loader expects one file per symbol at:
+
+```text
+data/processed/{SYMBOL}_1d.csv
+```
+
+The canonical minimum schema is:
+
+```text
+timestamp,open,high,low,close
+```
+
+`symbol` may be omitted and is attached from `{SYMBOL}` in the file path.
+The current prepared export uses `datetime` instead of `timestamp`; the
+loader treats that name as a source-column alias and passes the canonical
+`timestamp` column downstream. Optional columns such as `volume` are ignored.
+No timestamp or OHLC repair is performed.
+
+`timestamp` is the prepared bar label, interpreted as a UTC calendar
+timestamp. It is not converted to a nominal NY17 close. Calendar month is
+`timestamp`'s UTC calendar month. Small differences of a few hours or about a
+minute around the NY17 boundary are accepted as a non-material v2 Practical
+Track implementation convention.
+
 ## Ordering
 
 timestamp ascendingを必須とします。
-unsorted inputを自動sortする場合も、元dataがunsortedだったことを検出可能にします。
+unsorted inputは自動sortせず、failします。
 
 ## Duplicate
 
@@ -57,23 +88,19 @@ Close[t-1] / Close[t-241] - 1
 FX/CFDではbroker/server timezoneによりDaily barが異なるため、同一experiment内ではboundaryを固定します。
 複数sourceを無条件に混ぜません。
 
-Track B frozen contractでは、timestamp timezoneとdaily bar boundaryを別概念として扱います。
+Track B v2ではprepared bar labelをauthorityとし、Daily boundaryの再計算は行いません。
 
 ```text
-data_source: exness_mt5_tick
+data_source: exness_prepared_bid_ohlc
 price_type: bid
 timezone: UTC
-daily_bar_boundary: New York 17:00 close
-boundary_timezone: America/New_York
-boundary_local_time: 17:00
-expected_winter_utc: 22:00 UTC
-expected_summer_utc: 21:00 UTC
+daily_bar_boundary: prepared daily bar label
+calendar_month_timezone: UTC
+ny17_conversion_required: false
 ```
 
-OHLCはExness MT5 tick dataのBid ticksから構築します。UTCはraw timestampのtimezoneであり、
-`America/New_York`の17:00 local timeはdaily aggregationのboundaryです。DST判定はIANA timezone
-databaseの`America/New_York`をauthoritative sourceとし、expected UTC offsetsはsanity metadataのみとします。
-独自の`US_DST`ルールや固定日付テーブルは使用しません。
+OHLCは既に生成済みのExness Bid OHLCをそのまま使用します。raw tickの再validation、per-tick loop、
+NY17 aggregation、gap reconstructionはTrack B v2の責務ではありません。
 
 ## Price type
 

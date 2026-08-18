@@ -92,9 +92,9 @@ def track_b_config():
 
 def test_config_loader_validates_current_frozen_artifact(track_b_config):
     assert track_b_config.status == "frozen"
-    assert track_b_config.freeze_version == 1
+    assert track_b_config.freeze_version == 2
     assert track_b_config.split_assignment_basis == "next_1m_return_outcome_month"
-    assert track_b_config.boundary_timezone == "America/New_York"
+    assert track_b_config.boundary_timezone == "UTC"
     assert "price_type" in track_b_config.raw
 
 
@@ -120,7 +120,7 @@ def test_long_daily_validation_is_symbol_local_and_non_mutating():
         validate_track_b_daily(duplicate, config, allow_naive_timestamp=True)
 
 
-def test_track_b_timestamp_requires_utc_aware_nominal_ny17(track_b_config):
+def test_track_b_timestamp_requires_utc_aware_prepared_label(track_b_config):
     winter = _daily_fixture(start="2020-01", end="2020-01", symbols=("XAUUSD",))
     summer = _daily_fixture(start="2020-07", end="2020-07", symbols=("XAUUSD",))
     valid = pd.concat([winter, summer], ignore_index=True)
@@ -136,10 +136,9 @@ def test_track_b_timestamp_requires_utc_aware_nominal_ny17(track_b_config):
     with pytest.raises(TrackBDailyValidationError, match="UTC"):
         validate_track_b_daily(non_utc, track_b_config)
 
-    wrong_clock = valid.copy()
-    wrong_clock.loc[0, "timestamp"] += pd.Timedelta(hours=1)
-    with pytest.raises(TrackBDailyValidationError, match="nominal daily close"):
-        validate_track_b_daily(wrong_clock, track_b_config)
+    prepared_label = valid.copy()
+    prepared_label.loc[0, "timestamp"] += pd.Timedelta(hours=1)
+    assert len(validate_track_b_daily(prepared_label, track_b_config)) == 2
 
 
 def test_monthly_builder_uses_last_close_and_exact_calendar_month_arithmetic(track_b_config):
@@ -171,7 +170,7 @@ def test_monthly_builder_uses_last_close_and_exact_calendar_month_arithmetic(tra
     assert row["next_1m_return"] == pytest.approx(next_close / 999.0 - 1.0)
 
 
-def test_calendar_month_uses_new_york_local_date_not_utc_bar_open(track_b_config):
+def test_calendar_month_uses_prepared_utc_label(track_b_config):
     data = _daily_fixture(start="2019-01", end="2020-07", symbols=("XAUUSD",))
     may_close = data.loc[
         data["timestamp"] == _session_close(pd.Period("2020-05")), "close"
@@ -185,8 +184,8 @@ def test_calendar_month_uses_new_york_local_date_not_utc_bar_open(track_b_config
     replacement["high"] = 777.2
     replacement["low"] = 776.8
     data = pd.concat([data, pd.DataFrame([replacement])], ignore_index=True).sort_values("timestamp")
-    with pytest.raises(TrackBDailyValidationError, match="nominal daily close"):
-        _build_synthetic_monthly_observations(data, track_b_config)
+    built = _build_synthetic_monthly_observations(data, track_b_config)
+    assert "2020-06" in built.diagnostics["missing_calendar_months"]["XAUUSD"]
 
 
 def test_missing_calendar_month_is_excluded_without_fill(track_b_config):

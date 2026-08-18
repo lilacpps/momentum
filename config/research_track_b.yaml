@@ -1,5 +1,5 @@
-freeze_version: 1
-freeze_date: "2026-08-17"
+freeze_version: 2
+freeze_date: "2026-08-18"
 
 warmup_data_start: "2015-01"
 
@@ -35,25 +35,35 @@ symbol_universe:
     - EURGBP
     - AUDJPY
 
-data_source: exness_mt5_tick
+data_source: exness_prepared_bid_ohlc
 price_type: bid
 timezone: UTC
 
 daily_bar_boundary:
-  convention: new_york_17_close
-  boundary_timezone: America/New_York
-  boundary_local_time: "17:00"
-  expected_winter_utc: "22:00"
-  expected_summer_utc: "21:00"
+  convention: prepared_daily_bar_label
+  authority: prepared_ohlc_timestamp
+  calendar_month_timezone: UTC
+  ny17_conversion_required: false
 
-previous_freeze_version: null
+previous_freeze_version: 1
+change_reason: >-
+  Engineering/data-pipeline simplification before predictive or performance
+  results are viewed: prepared Exness Bid OHLC is now the research input
+  authority. Track B no longer revalidates raw ticks or reconstructs Daily
+  OHLC from 1m data; M1A v2 consumes prepared 1d OHLC directly.
+changed_fields:
+  - data_source
+  - daily_bar_boundary
+  - structural_validation_input
 status: frozen
 
 notes: >-
-  Source is Exness MT5 tick data. OHLC is constructed from Bid ticks.
-  Raw tick timestamps are UTC. Daily boundary uses the IANA timezone
-  America/New_York at local time 17:00; expected UTC offsets are sanity
-  metadata only and are not the DST authority.
+  Source is prepared Exness Bid OHLC. Prepared OHLC frequencies from 1m
+  through 1w may exist; M1A authority is prepared 1d. The prepared Daily
+  bar label is a UTC calendar timestamp and is not converted to a nominal
+  New York 17:00 close. Small differences around the NY17 boundary are an
+  accepted non-material implementation convention for the v2 Practical
+  Track.
   The warmup period is used only for predictor formation and state
   initialization and is excluded from Development, Validation, and Final
   Holdout evaluation samples. The primary and secondary universes are

@@ -1,6 +1,6 @@
 # M1 / M2 / M5 / Challenge Academic Validation Specification
 
-## M1A v1 implementation safety convention
+## M1A v2 implementation safety convention
 
 The normative Track B structural-validation implementation contract is maintained in `docs/04_validation_policy.md`; this document defines the M1A methodology and its interface to that contract.
 
@@ -21,7 +21,7 @@ Diagnostics retain aggregate counts for backward compatibility and additionally
 report `diagnostics_by_universe_role` with observation, positive, negative, and
 zero counts for primary and secondary robustness samples.
 
-Structural validation is bound to the executed Daily dataset by
+Structural validation is bound to the executed prepared Daily dataset by
 `dataset_fingerprint_algorithm = track-b-daily-sha256-v1`. The fingerprint
 covers only `symbol`, `timestamp`, `open`, `high`, `low`, and `close`; rows are
 canonicalized by symbol and UTC timestamp ordering before deterministic SHA-256
@@ -31,16 +31,18 @@ Its structural-validation input is a `StructuralValidationSummary` containing
 `freeze_version`, `structural_spec_version`, `dataset_fingerprint`,
 `dataset_fingerprint_algorithm`, and `status_by_symbol`.
 The frozen structural specification identifier is
-`structural_spec_version = track-b-structural-v1`; other structural spec
+`structural_spec_version = track-b-structural-v2`; other structural spec
 versions are rejected. Timestamp serialization is a signed int64 count of
 nanoseconds since the Unix epoch after UTC canonicalization, independent of the
 input datetime dtype resolution.
 
-For real Track B input, `timestamp` must be timezone-aware UTC and must represent
-the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is
-accepted only by the private synthetic fixture path. Calendar month identity is
-derived from the New York local date; a bar-open timestamp or a non-17:00 local
-timestamp is invalid.
+For real Track B v2 input, `timestamp` is the prepared Daily bar label and is
+interpreted as a UTC calendar timestamp. It need not represent the nominal
+`America/New_York` 17:00 session close, and no NY17 conversion is performed.
+Calendar month identity is derived from the prepared timestamp's UTC calendar
+month. The private synthetic fixture path may still use timezone-naive values.
+The v2 structural validator performs only minimal fail-fast checks and passes
+the same validated prepared Daily dataset to fingerprinting and M1A.
 
 Statsmodels robust results are the inference authority for one-way HAC and
 calendar-month cluster confidence intervals: `conf_int()` and `t_test()` are
@@ -211,21 +213,20 @@ M1出力は、少なくとも`track`、`workstream`、`analysis_name`、`symbol`
 `predictor_definition`、`dependent_definition`、`inference_method`、`covariance_method`、
 `lag_or_cluster`、`nobs`、`data_source`、`timezone`、`daily_boundary`、`spec_version`の意味を保持します。
 
-### M1A implementation convention — `m1a-practical-v1`
+### M1A implementation convention — `m1a-practical-v1` on Track B v2
 
 以下はpaper-explicitな仕様ではなく、M1A v1の再現可能なproject implementation conventionです。
 
 #### Daily timestamp and calendar identity
 
-M1AのDaily input timestampは、Track BのNew York 17:00 Daily sessionのnominal close timestampをUTCで表したものとします。
-calendar monthはそのtimestampを`America/New_York`へ変換したlocal dateから決定し、bar-open timestampをmonth identityの判定には使いません。
-timezone-naiveなsynthetic inputは、current Track Bのraw timestamp contractに従いUTCとして扱います。
+M1AのDaily input timestampはprepared OHLCのbar labelをauthorityとし、UTC calendar timestampとして扱います。
+calendar monthはそのtimestampのUTC calendar monthから決定し、NY17 nominal-close timestampへの変換は要求しません。
+timezone-naiveなsynthetic inputはテスト専用にUTCとして扱います。
 
 Real Track B requires timezone-aware UTC timestamps. Timezone-naive timestamps
 are accepted only by private synthetic fixtures; they are not normalized on the
-real-data path. The timestamp must be the nominal `America/New_York` 17:00
-session close, and calendar month identity uses that local date rather than a
-bar-open timestamp.
+real-data path. The prepared timestamp need not be the nominal
+`America/New_York` 17:00 session close, and calendar month identity uses UTC.
 #### Covariance options
 
 statsmodelsのlibrary defaultに依存せず、次のoptionsを明示的に渡します。confidence levelは`0.95`です。

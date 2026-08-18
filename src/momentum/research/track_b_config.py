@@ -11,11 +11,12 @@ import yaml
 
 VALID_STRUCTURAL_STATUSES = frozenset({"pass", "pass_with_warning"})
 SUPPORTED_DATASET_FINGERPRINT_ALGORITHM = "track-b-daily-sha256-v1"
-SUPPORTED_STRUCTURAL_SPEC_VERSION = "track-b-structural-v1"
+SUPPORTED_STRUCTURAL_SPEC_VERSION = "track-b-structural-v2"
 REQUIRED_TOP_LEVEL_FIELDS = (
     "freeze_version", "freeze_date", "warmup_data_start", "development_period",
     "validation_period", "final_holdout_period", "split_assignment", "symbol_universe",
     "data_source", "price_type", "timezone", "daily_bar_boundary", "status",
+    "previous_freeze_version", "change_reason", "changed_fields",
 )
 
 
@@ -64,7 +65,8 @@ class TrackBConfig:
 
     @property
     def boundary_timezone(self) -> str:
-        return str(self.daily_boundary["boundary_timezone"])
+        """Timezone used for calendar-month identity in the v2 contract."""
+        return str(self.daily_boundary.get("calendar_month_timezone", "UTC"))
 
     @property
     def analysis_splits(self) -> tuple[str, str]:
@@ -120,6 +122,16 @@ def load_track_b_config(path: str | Path = "config/research_track_b.yaml") -> Tr
         raise TrackBConfigError("freeze_version must be a positive integer")
     if raw["status"] != "frozen":
         raise TrackBConfigError("Track B artifact status must be frozen")
+    previous_version = raw["previous_freeze_version"]
+    if version == 1:
+        if previous_version is not None:
+            raise TrackBConfigError("freeze_version 1 must not have a previous freeze version")
+    elif previous_version != version - 1:
+        raise TrackBConfigError("previous_freeze_version must reference the immediately preceding version")
+    if not str(raw["change_reason"]).strip():
+        raise TrackBConfigError("change_reason must be non-empty")
+    if not isinstance(raw["changed_fields"], (list, tuple)) or not raw["changed_fields"]:
+        raise TrackBConfigError("changed_fields must be a non-empty list")
 
     split = _mapping(raw["split_assignment"], "split_assignment")
     basis = split.get("basis")
@@ -131,7 +143,13 @@ def load_track_b_config(path: str | Path = "config/research_track_b.yaml") -> Tr
     if not primary or not secondary or set(primary) & set(secondary):
         raise TrackBConfigError("primary and secondary symbol universes must be non-empty and disjoint")
     boundary = _mapping(raw["daily_bar_boundary"], "daily_bar_boundary")
-    for field in ("boundary_timezone", "boundary_local_time"):
+    if "calendar_month_timezone" not in boundary:
+        raise TrackBConfigError("daily_bar_boundary.calendar_month_timezone is required")
+    if str(boundary["calendar_month_timezone"]) != "UTC":
+        raise TrackBConfigError("Track B v2 calendar_month_timezone must be UTC")
+    if boundary.get("ny17_conversion_required") is not False:
+        raise TrackBConfigError("Track B v2 must not require NY17 timestamp conversion")
+    for field in ("convention", "authority"):
         if field not in boundary:
             raise TrackBConfigError(f"daily_bar_boundary.{field} is required")
 

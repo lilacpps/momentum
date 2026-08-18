@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 import hashlib
 import struct
 from typing import Any
@@ -118,22 +117,6 @@ def validate_track_b_daily(
         if not group["timestamp"].is_monotonic_increasing:
             raise TrackBDailyValidationError(f"timestamp must be ascending within symbol: {symbol}")
 
-    try:
-        boundary_time = datetime.strptime(
-            str(config.daily_boundary["boundary_local_time"]), "%H:%M"
-        ).time()
-    except (KeyError, ValueError) as exc:
-        raise TrackBDailyValidationError("invalid daily boundary local time") from exc
-    local_timestamp = frame["timestamp"].dt.tz_convert(config.boundary_timezone)
-    valid_boundary = (
-        (local_timestamp.dt.hour == boundary_time.hour)
-        & (local_timestamp.dt.minute == boundary_time.minute)
-        & (local_timestamp.dt.second == boundary_time.second)
-        & (local_timestamp.dt.microsecond == 0)
-    )
-    if not valid_boundary.all():
-        raise TrackBDailyValidationError("timestamp is not the frozen nominal daily close time")
-
     for column in ("open", "high", "low", "close"):
         if not pd.api.types.is_numeric_dtype(frame[column]):
             raise TrackBDailyValidationError(f"{column} must be numeric")
@@ -170,8 +153,11 @@ def _build_monthly_observations(
         config,
         allow_naive_timestamp=allow_naive_timestamp,
     )
-    local_dates = frame["timestamp"].dt.tz_convert(config.boundary_timezone).dt.date
-    frame["calendar_month"] = pd.to_datetime(local_dates).dt.to_period("M")
+    # v2 uses the prepared bar label directly.  Calendar month is UTC month;
+    # no NY17 conversion or bar reconstruction is performed here.
+    frame["calendar_month"] = (
+        frame["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None).dt.to_period("M")
+    )
     requested_start = config.warmup_data_start
     requested_end = max_outcome_month
     in_range = frame["calendar_month"].between(requested_start, requested_end)
