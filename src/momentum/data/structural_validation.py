@@ -84,6 +84,7 @@ class _Tick:
     bid: float
     source_file_order: int
     source_row_number: int
+    session_close_month: str
 
     @property
     def timestamp_ns(self) -> int:
@@ -191,6 +192,9 @@ def iter_exness_ticks(
     chunksize: int = DEFAULT_CHUNKSIZE,
     diagnostics: dict[str, Any] | None = None,
     count_diagnostics: bool = True,
+    boundary_timezone: str = BOUNDARY_TZ,
+    boundary_time: time = BOUNDARY_TIME,
+    status_months: frozenset[str] | None = None,
 ) -> Iterator[_Tick]:
     """Yield valid ticks from one inspected Exness CSV without full loading."""
     if chunksize <= 0:
@@ -223,6 +227,34 @@ def iter_exness_ticks(
                 format="mixed",
             )
             timestamp_valid = explicit_timezone & parsed_timestamps.notna()
+            local_timestamps = parsed_timestamps.dt.tz_convert(boundary_timezone)
+            after_boundary = (
+                (local_timestamps.dt.hour > boundary_time.hour)
+                | (
+                    (local_timestamps.dt.hour == boundary_time.hour)
+                    & (local_timestamps.dt.minute > boundary_time.minute)
+                )
+                | (
+                    (local_timestamps.dt.hour == boundary_time.hour)
+                    & (local_timestamps.dt.minute == boundary_time.minute)
+                    & (local_timestamps.dt.second > boundary_time.second)
+                )
+                | (
+                    (local_timestamps.dt.hour == boundary_time.hour)
+                    & (local_timestamps.dt.minute == boundary_time.minute)
+                    & (local_timestamps.dt.second == boundary_time.second)
+                    & (local_timestamps.dt.microsecond > boundary_time.microsecond)
+                )
+            ).fillna(False)
+            local_dates = pd.to_datetime(local_timestamps.dt.date)
+            session_dates = local_dates + pd.to_timedelta(
+                after_boundary.astype("int64"), unit="D"
+            )
+            session_close_months = session_dates.dt.to_period("M").astype("string")
+            if status_months is None:
+                status_timestamp = timestamp_valid
+            else:
+                status_timestamp = timestamp_valid & session_close_months.isin(status_months)
             bid_values = pd.to_numeric(chunk["Bid"], errors="coerce").to_numpy(
                 dtype="float64", na_value=np.nan
             )
@@ -237,10 +269,10 @@ def iter_exness_ticks(
             if diagnostics is not None and count_diagnostics:
                 diagnostics["timestamp_parse_errors"] += int((~timestamp_valid).sum())
                 diagnostics["nonfinite_or_invalid_bid_rows"] += int(
-                    (timestamp_valid & ~bid_valid).sum()
+                    (status_timestamp & ~bid_valid).sum()
                 )
                 diagnostics["source_symbol_mismatch_count"] += int(
-                    (valid_timestamp_and_bid & ~source_symbol_matches).sum()
+                    (status_timestamp & bid_valid & ~source_symbol_matches).sum()
                 )
 
             for local_position in np.flatnonzero(valid_rows.to_numpy()):
@@ -250,6 +282,7 @@ def iter_exness_ticks(
                     float(bid_values[position]),
                     source_file_order,
                     row_offset + position,
+                    str(session_close_months.iloc[position]),
                 )
             row_offset += len(chunk)
     except pd.errors.ParserError as exc:
@@ -311,6 +344,9 @@ def _source_ticks(
     chunksize: int,
     diagnostics: dict[str, Any],
     count_diagnostics: bool,
+    boundary_timezone: str,
+    boundary_time: time,
+    status_months: frozenset[str] | None,
 ) -> Iterator[_Tick]:
     for source_file_order, path in enumerate(files):
         yield from iter_exness_ticks(
@@ -320,6 +356,9 @@ def _source_ticks(
             chunksize=chunksize,
             diagnostics=diagnostics,
             count_diagnostics=count_diagnostics,
+            boundary_timezone=boundary_timezone,
+            boundary_time=boundary_time,
+            status_months=status_months,
         )
 
 
@@ -329,23 +368,35 @@ def _canonical_unique_ticks(
     builder: _DailyBuilder,
     *,
     track_order: bool,
+    status_months: frozenset[str],
 ) -> None:
     previous_timestamp_ns: int | None = None
+    requested_previous_timestamp_ns: int | None = None
     timestamp_seen_bids: set[float] = set()
     for tick in ticks:
         timestamp_ns = tick.timestamp_ns
+        in_requested_range = tick.session_close_month in status_months
         if diagnostics["first_valid_tick"] is None:
             diagnostics["first_valid_tick"] = tick.timestamp
         diagnostics["last_valid_tick"] = tick.timestamp
-        if track_order and previous_timestamp_ns is not None and timestamp_ns < previous_timestamp_ns:
-            diagnostics["out_of_order_detected"] = True
+        if not in_requested_range:
+            continue
+        if in_requested_range:
+            if (
+                track_order
+                and requested_previous_timestamp_ns is not None
+                and timestamp_ns < requested_previous_timestamp_ns
+            ):
+                diagnostics["out_of_order_detected"] = True
+            if requested_previous_timestamp_ns == timestamp_ns:
+                diagnostics["repeated_timestamp_count"] += 1
+            requested_previous_timestamp_ns = timestamp_ns
         if previous_timestamp_ns != timestamp_ns:
             timestamp_seen_bids = set()
-        else:
-            diagnostics["repeated_timestamp_count"] += 1
         previous_timestamp_ns = timestamp_ns
         if tick.bid in timestamp_seen_bids:
-            diagnostics["exact_duplicate_row_count"] += 1
+            if in_requested_range:
+                diagnostics["exact_duplicate_row_count"] += 1
             continue
         timestamp_seen_bids.add(tick.bid)
         builder.add(tick)
@@ -359,6 +410,7 @@ def _sqlite_fallback(
     diagnostics: dict[str, Any],
     boundary_timezone: str,
     boundary_time: time,
+    status_months: frozenset[str],
 ) -> pd.DataFrame:
     """Re-read one out-of-order symbol through a disk-backed SQLite cursor."""
     with tempfile.TemporaryDirectory(prefix="momentum-track-b-") as temp_dir:
@@ -367,54 +419,61 @@ def _sqlite_fallback(
         try:
             connection.execute(
                 "CREATE TABLE ticks (timestamp_ns INTEGER NOT NULL, bid REAL NOT NULL, "
-                "source_file_order INTEGER NOT NULL, source_row_number INTEGER NOT NULL)"
+                "source_file_order INTEGER NOT NULL, source_row_number INTEGER NOT NULL, "
+                "session_close_month TEXT NOT NULL)"
             )
             connection.execute(
                 "CREATE INDEX ticks_canonical_order ON ticks "
                 "(timestamp_ns, source_file_order, source_row_number)"
             )
-            batch: list[tuple[int, float, int, int]] = []
+            batch: list[tuple[int, float, int, int, str]] = []
             for tick in _source_ticks(
                 files,
                 symbol,
                 chunksize=chunksize,
                 diagnostics=diagnostics,
                 count_diagnostics=False,
+                boundary_timezone=boundary_timezone,
+                boundary_time=boundary_time,
+                status_months=status_months,
             ):
-                batch.append((tick.timestamp_ns, tick.bid, tick.source_file_order, tick.source_row_number))
+                batch.append((
+                    tick.timestamp_ns,
+                    tick.bid,
+                    tick.source_file_order,
+                    tick.source_row_number,
+                    tick.session_close_month,
+                ))
                 if len(batch) >= 10_000:
-                    connection.executemany("INSERT INTO ticks VALUES (?, ?, ?, ?)", batch)
+                    connection.executemany("INSERT INTO ticks VALUES (?, ?, ?, ?, ?)", batch)
                     batch.clear()
             if batch:
-                connection.executemany("INSERT INTO ticks VALUES (?, ?, ?, ?)", batch)
+                connection.executemany("INSERT INTO ticks VALUES (?, ?, ?, ?, ?)", batch)
             connection.commit()
 
-            builder = _DailyBuilder(symbol, boundary_timezone, boundary_time)
-            previous_timestamp_ns: int | None = None
-            timestamp_seen_bids: set[float] = set()
-            for timestamp_ns, bid, source_file_order, source_row_number in connection.execute(
-                "SELECT timestamp_ns, bid, source_file_order, source_row_number "
-                "FROM ticks ORDER BY timestamp_ns, source_file_order, source_row_number"
-            ):
-                if diagnostics["first_valid_tick"] is None:
-                    diagnostics["first_valid_tick"] = pd.Timestamp(timestamp_ns, unit="ns", tz="UTC")
-                diagnostics["last_valid_tick"] = pd.Timestamp(timestamp_ns, unit="ns", tz="UTC")
-                if previous_timestamp_ns != timestamp_ns:
-                    timestamp_seen_bids = set()
-                else:
-                    diagnostics["repeated_timestamp_count"] += 1
-                previous_timestamp_ns = timestamp_ns
-                bid = float(bid)
-                if bid in timestamp_seen_bids:
-                    diagnostics["exact_duplicate_row_count"] += 1
-                    continue
-                timestamp_seen_bids.add(bid)
-                builder.add(_Tick(
+            sorted_ticks = (
+                _Tick(
                     pd.Timestamp(timestamp_ns, unit="ns", tz="UTC"),
-                    bid,
+                    float(bid),
                     int(source_file_order),
                     int(source_row_number),
-                ))
+                    str(session_close_month),
+                )
+                for timestamp_ns, bid, source_file_order, source_row_number, session_close_month
+                in connection.execute(
+                "SELECT timestamp_ns, bid, source_file_order, source_row_number "
+                ", session_close_month FROM ticks "
+                "ORDER BY timestamp_ns, source_file_order, source_row_number"
+                )
+            )
+            builder = _DailyBuilder(symbol, boundary_timezone, boundary_time)
+            _canonical_unique_ticks(
+                sorted_ticks,
+                diagnostics,
+                builder,
+                track_order=False,
+                status_months=status_months,
+            )
             return builder.finish()
         finally:
             connection.close()
@@ -429,6 +488,12 @@ def _process_symbol(
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     diagnostics = _new_diagnostics(symbol, config)
     boundary_time = _configured_boundary_time(config)
+    status_months = frozenset(diagnostics["missing_calendar_months"] + diagnostics["available_calendar_months"])
+    if not status_months:
+        status_months = frozenset(
+            str(month)
+            for month in pd.period_range(config.warmup_data_start, config.final_holdout.end, freq="M")
+        )
     if not files:
         diagnostics["failure_reasons"].append("missing_source_files")
         return _daily_frame(()), diagnostics
@@ -442,10 +507,14 @@ def _process_symbol(
                 chunksize=chunksize,
                 diagnostics=diagnostics,
                 count_diagnostics=True,
+                boundary_timezone=config.boundary_timezone,
+                boundary_time=boundary_time,
+                status_months=status_months,
             ),
             diagnostics,
             builder,
             track_order=True,
+            status_months=status_months,
         )
         if diagnostics["out_of_order_detected"]:
             # Discard all partial state. The full symbol is rebuilt from source.
@@ -465,6 +534,7 @@ def _process_symbol(
                 diagnostics=fallback_diagnostics,
                 boundary_timezone=config.boundary_timezone,
                 boundary_time=boundary_time,
+                status_months=status_months,
             )
             diagnostics["first_valid_tick"] = fallback_diagnostics["first_valid_tick"]
             diagnostics["last_valid_tick"] = fallback_diagnostics["last_valid_tick"]

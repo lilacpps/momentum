@@ -306,6 +306,49 @@ def test_requested_range_excludes_out_of_range_daily_and_fingerprint(tmp_path):
     assert local_months.max() == 3
 
 
+def test_out_of_range_anomalies_do_not_change_daily_fingerprint_or_status(tmp_path):
+    config_path = _config(tmp_path)
+    base_root = tmp_path / "base"
+    anomaly_root = tmp_path / "anomaly"
+    for symbol in ("XAUUSD", "EURJPY"):
+        base_rows = _complete_rows(symbol)
+        _write_csv(base_root, symbol, "ticks.csv", base_rows)
+        if symbol == "XAUUSD":
+            out_of_range = [
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2020-04-20"), "Bid": 100.0, "Ask": 100.1},
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2020-04-19"), "Bid": 101.0, "Ask": 101.1},
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2020-04-18"), "Bid": 102.0, "Ask": 102.1},
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2020-04-18"), "Bid": 102.0, "Ask": 102.1},
+                {"Exness": "exness", "Symbol": "OTHER", "Timestamp": _utc_z("2020-04-17"), "Bid": 103.0, "Ask": 103.1},
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2020-04-16"), "Bid": -1.0, "Ask": -0.9},
+                {"Exness": "exness", "Symbol": symbol, "Timestamp": _utc_z("2019-12-20"), "Bid": 777.0, "Ask": 777.1},
+            ]
+            _write_csv(anomaly_root, symbol, "ticks.csv", base_rows + out_of_range)
+        else:
+            _write_csv(anomaly_root, symbol, "ticks.csv", base_rows)
+
+    base = run_track_b_structural_validation(base_root, config_path)
+    anomaly = run_track_b_structural_validation(anomaly_root, config_path)
+    pd.testing.assert_frame_equal(base.daily_ohlc, anomaly.daily_ohlc)
+    assert base.summary.dataset_fingerprint == anomaly.summary.dataset_fingerprint
+    assert base.summary.status_by_symbol == anomaly.summary.status_by_symbol
+    assert anomaly.summary.status_by_symbol["XAUUSD"] == "pass"
+
+
+def test_timezone_naive_timestamp_is_not_implicitly_utc(tmp_path):
+    path = _write_csv(tmp_path, "XAUUSD", "naive.csv", [
+        {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": "2020-01-15 17:00:00", "Bid": 1.0, "Ask": 1.1},
+    ])
+    diagnostics = {
+        "timestamp_parse_errors": 0,
+        "nonfinite_or_invalid_bid_rows": 0,
+        "source_symbol_mismatch_count": 0,
+    }
+    assert list(iter_exness_ticks(path, symbol="XAUUSD", source_file_order=0, diagnostics=diagnostics)) == []
+    assert diagnostics["timestamp_parse_errors"] == 1
+    assert diagnostics["nonfinite_or_invalid_bid_rows"] == 0
+
+
 def test_generatable_failed_secondary_remains_in_daily_and_fingerprint(tmp_path):
     config_path = _config(tmp_path)
     root = tmp_path / "raw"
