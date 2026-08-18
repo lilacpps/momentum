@@ -25,6 +25,24 @@ It uses `config/research_track_b.yaml` and `data/processed` by default,
 prints symbol diagnostics plus the dataset fingerprint, and returns exit code
 1 when any frozen primary symbol has `validation_status: fail`.
 
+## Track B M1A real historical execution
+
+After the pre-execution review and an explicitly approved real-data run, use:
+
+```text
+python scripts/run_m1a.py
+```
+
+The command loads the current frozen config, re-runs structural validation,
+checks the primary gate, and passes the validator's canonical `daily_ohlc` and
+`StructuralValidationSummary` directly to `run_m1a_track_b`. It refuses to
+save results if freeze identity, inference metadata, or Final Holdout safety
+checks fail. Successful runs are written to a unique directory under
+`results/m1a/freeze_v3_<timestamp>/` with observations, regression outputs,
+diagnostics, metadata, and structural-validation artifacts. Secondary symbols
+that fail structural validation are reported and excluded from secondary
+robustness without blocking primary M1A.
+
 Example command for a later explicitly requested real-data run:
 
 ```text

@@ -27,6 +27,7 @@ ENV/
 artifacts/
 models/
 reports/generated/
+results/
 notebooks/.ipynb_checkpoints/
 
 # Jupyter
