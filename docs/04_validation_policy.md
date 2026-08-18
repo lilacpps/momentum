@@ -204,7 +204,7 @@ DST切替はIANA timezone databaseの`America/New_York`で判定し、expected U
 #### F. Monthly availability
 
 - 必要なcalendar monthについて`P[M] = last valid Daily Close of calendar month M`を構築できる。
-- 必要calendar monthが丸ごと欠け、past_12m / next_1m observationの構築に重大な影響がある場合はfailure候補とする。
+- requested range内のcalendar monthが1つでも丸ごと欠ける場合は`fail`とする。past_12m / next_1m observationおよびHACのcalendar sequenceに直接影響するためである。
 - 数tick、数時間、単一Daily bar程度の欠損だけを理由にsymbolを自動除外しない。
 
 #### G. Large-gap diagnostics
@@ -458,3 +458,151 @@ for `t <= T` が変化してはなりません。
 - cost sensitivity / break-even cost
 - Result Level metadata
 - Track B final holdout report
+
+---
+
+# Track B Structural Validation v1 Implementation Convention
+
+This section is the authoritative implementation contract for Track B structural validation. `docs/03_data_and_costs.md` remains authoritative for data semantics, and `docs/07_academic_validation_spec.md` remains authoritative for M1A methodology. Other documents should reference this section rather than redefine its rules.
+
+Structural validation inspects raw data structure and produces canonical Daily OHLC plus a `StructuralValidationSummary`. It does not generate returns, predictors, regressions, effect sizes, PnL, Sharpe, or strategy results. Raw structure in the Final Holdout may be inspected for coverage and integrity, but Final Holdout performance information remains sealed until M7.
+
+## Frozen identifiers and requested range
+
+The structural validator must use these fixed identifiers:
+
+```text
+structural_spec_version = track-b-structural-v1
+dataset_fingerprint_algorithm = track-b-daily-sha256-v1
+```
+
+The current requested range is `2015-01` through `2026-06`, inclusive. The integer `freeze_version` is read from the current Track B artifact. A freeze artifact is never modified in place; an objectively justified change creates a new integer version with its reason and affected fields recorded.
+
+## Canonical raw tick adapter input
+
+Vendor CSV headers are not frozen. A source-specific adapter must emit this canonical representation before validation:
+
+```text
+symbol
+timestamp
+bid
+source_file_order
+source_row_number
+```
+
+`symbol` is a frozen Track B symbol. `timestamp` must be parseable as timezone-aware UTC on the real-data path; timezone-naive timestamps are not implicitly localized. `bid` must be numeric, finite, and strictly positive. A timestamp parse failure or missing timestamp is an invalid record and is counted in diagnostics.
+
+`source_file_order` is a deterministic integer assigned from a stable sort of normalized relative file paths in the source manifest. `source_row_number` is the original zero-based row position within its source file. Together they reproduce raw source order deterministically.
+
+## Canonical ordering and duplicate handling
+
+Valid ticks are processed with a stable sort by:
+
+```text
+symbol ascending
+timestamp UTC ascending
+source_file_order ascending
+source_row_number ascending
+```
+
+Raw input need not already be sorted. Whether out-of-order records were present is recorded as a diagnostic. Repeated timestamps within a symbol are not an automatic failure. Ticks with the same timestamp but different Bid values are retained and processed in source order.
+
+An exact duplicate is a row whose canonical `symbol`, `timestamp`, and `bid` fields are identical. The validator must record `exact_duplicate_row_count`, retain the first row in canonical stable order, and remove later exact duplicates. Same-timestamp rows with different prices are not removed.
+
+## Invalid record policy
+
+The validator may exclude rows with an unparseable or missing timestamp, a nonnumeric/NaN/infinite Bid, or a Bid less than or equal to zero. It must record at least `timestamp_parse_errors` and `nonfinite_or_invalid_bid_rows`. No arbitrary invalid-row threshold is used. Failure is determined by whether the remaining data can produce deterministic Daily OHLC, usable Bid series, and required monthly coverage.
+
+## NY 17:00 session and Daily OHLC
+
+The aggregation authority is raw timestamp in UTC, boundary timezone `America/New_York`, boundary local time `17:00`, and Bid price. The IANA timezone database is the DST authority; fixed UTC offset tables are not.
+
+Session D is the half-open-on-the-left interval `(previous NY 17:00, current NY 17:00]`. A tick exactly on the previous boundary belongs to the previous session; a tick exactly on the current boundary belongs to the current session. The generated Daily timestamp is the current session's NY 17:00 close boundary converted to a timezone-aware UTC timestamp. It is not a bar-open timestamp.
+
+For each non-empty session, the validator constructs:
+
+```text
+open  = first valid Bid in canonical order
+high  = maximum valid Bid
+low   = minimum valid Bid
+close = last valid Bid in canonical order
+```
+
+Each generated bar must satisfy `open > 0`, `high > 0`, `low > 0`, `close > 0`, `high >= open`, `high >= close`, `low <= open`, `low <= close`, and `high >= low`. Empty sessions are not synthesized and no fill is applied.
+
+## Calendar month and coverage
+
+Calendar month is determined from the Daily close timestamp converted to the `America/New_York` local date. The existing M1A rule applies: `P[M]` is the last valid Daily Close in calendar month M. Forward-fill, backward-fill, zero-fill, and nearest-month substitution are prohibited.
+
+For the requested range, every calendar month must have at least one valid Daily Close. A completely missing requested month is a `fail`, because it affects exact-calendar-month predictors and HAC calendar continuity. A single missing session, short tick gap, holiday, or weekend closure is not an automatic failure.
+
+## Large-gap diagnostic
+
+Using the canonical valid tick sequence and expected NY daily-close boundaries, a suspicious gap is two or more consecutive expected daily-close boundaries crossed without a valid tick. The normal weekly closure from Friday 17:00 to Sunday 17:00 is excluded conceptually. `suspicious_gap_count > 0` is a warning, not an automatic failure. Failure occurs only through a separate criterion such as missing monthly coverage, inability to construct a trusted series, or clear source corruption.
+
+## Status decision table
+
+`pass` requires complete requested monthly coverage, deterministic timestamp interpretation and ordering, a valid Bid series, deterministic Daily aggregation, no source-corruption indication, and no structural warnings.
+
+`pass_with_warning` means the research series remains complete, deterministic, and usable, but minor anomalies were recorded. Examples include out-of-order input, removed invalid rows, removed exact duplicates, harmless repeated timestamps, or suspicious gaps. Such a symbol remains in its frozen universe role.
+
+`fail` means a required month is absent, UTC interpretation or deterministic ordering is impossible, no usable Bid series exists, Daily OHLC invariants fail, source corruption is major, requested coverage is materially insufficient, or the M1A/M2 research series cannot be trusted.
+
+The v1 contract does not add arbitrary thresholds such as tick completeness percentages, missing-rate limits, minimum ticks per day, invalid-row counts, or cross-source price-difference limits.
+
+## Validator output contract
+
+The canonical Daily output is the long-form dataset with exactly:
+
+```text
+symbol
+timestamp
+open
+high
+low
+close
+```
+
+Its timestamp is timezone-aware UTC and represents the nominal NY 17:00 close. The exact canonical Daily dataset inspected by structural validation must be the dataset passed to `compute_track_b_daily_fingerprint()` and then to M1A. The validator must not generate a separate dataset for either consumer.
+
+Symbol-level diagnostics must be able to report:
+
+```text
+symbol
+freeze_version
+structural_spec_version
+requested_start
+requested_end
+first_valid_tick
+last_valid_tick
+timestamp_parse_errors
+nonfinite_or_invalid_bid_rows
+out_of_order_detected
+repeated_timestamp_count
+exact_duplicate_row_count
+suspicious_gap_count
+daily_bar_count
+available_calendar_months
+missing_calendar_months
+validation_status
+warnings
+failure_reasons
+```
+
+`warnings` and `failure_reasons` are machine-readable lists. The run-level `StructuralValidationSummary` retains:
+
+```text
+freeze_version
+structural_spec_version
+dataset_fingerprint
+dataset_fingerprint_algorithm
+status_by_symbol
+```
+
+The fixed fingerprint algorithm canonicalizes timestamps as signed int64 nanoseconds since the Unix epoch in UTC. It fingerprints the exact canonical Daily dataset used by validation and M1A.
+
+## Primary, secondary, and Final Holdout gates
+
+All frozen primary symbols must be `pass` or `pass_with_warning` before current-freeze M1A primary real-data execution begins. Secondary symbols are gated individually for their own robustness analysis; a secondary failure does not block primary M1A or M2. Removing a failed symbol requires a new freeze version before any performance result is viewed; the existing artifact is not edited in place.
+
+Structural validation may inspect Final Holdout raw coverage and integrity. It must not generate or expose Final Holdout returns, predictors, regressions, effect sizes, PnL, Sharpe, or strategy results.

@@ -2,6 +2,8 @@
 
 ## M1A v1 implementation safety convention
 
+The normative Track B structural-validation implementation contract is maintained in `docs/04_validation_policy.md`; this document defines the M1A methodology and its interface to that contract.
+
 The implementation identifier is `spec_version = m1a-practical-v1`. The only
 production execution entry point is `run_m1a_track_b`. Synthetic fixtures may
 use private test-support builders, but they are not production package exports.
