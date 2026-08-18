@@ -14,15 +14,16 @@ from momentum.data.track_b import compute_track_b_daily_fingerprint
 from momentum.research.track_b_config import load_track_b_config, validate_m1a_real_data_gate
 
 
-def _config_path(tmp_path: Path) -> Path:
+def _config_path(tmp_path: Path, *, warmup: str = "2020-01") -> Path:
     tmp_path.mkdir(parents=True, exist_ok=True)
+    start = pd.Period(warmup, freq="M")
     config = {
         "freeze_version": 2,
         "freeze_date": "2026-08-18",
-        "warmup_data_start": "2020-01",
-        "development_period": {"start": "2020-01", "end": "2020-01"},
-        "validation_period": {"start": "2020-02", "end": "2020-02"},
-        "final_holdout_period": {"start": "2020-03", "end": "2020-03"},
+        "warmup_data_start": str(start),
+        "development_period": {"start": str(start), "end": str(start)},
+        "validation_period": {"start": str(start + 1), "end": str(start + 1)},
+        "final_holdout_period": {"start": str(start + 2), "end": str(start + 2)},
         "split_assignment": {"basis": "next_1m_return_outcome_month"},
         "symbol_universe": {
             "primary": ["XAUUSD"],
@@ -66,9 +67,15 @@ def _write_universe(root: Path, frame: pd.DataFrame, *, primary: pd.DataFrame | 
     (root / "EURUSD_1d.csv").write_text(frame.to_csv(index=False), encoding="utf-8")
 
 
-def _run(tmp_path: Path, frame: pd.DataFrame, *, primary: pd.DataFrame | None = None):
+def _run(
+    tmp_path: Path,
+    frame: pd.DataFrame,
+    *,
+    primary: pd.DataFrame | None = None,
+    config_path: Path | None = None,
+):
     root = tmp_path / "processed"
-    config_path = _config_path(tmp_path)
+    config_path = config_path or _config_path(tmp_path)
     _write_universe(root, frame, primary=primary)
     return run_track_b_structural_validation(root, config_path)
 
@@ -130,6 +137,31 @@ def test_missing_calendar_month_fails(tmp_path):
     result = _run(tmp_path, _daily_rows(months=("2020-01", "2020-03")))
     row = result.symbol_diagnostics.loc[result.symbol_diagnostics["symbol"] == "XAUUSD"].iloc[0]
     assert row["validation_status"] == "fail"
+    assert "missing_calendar_months" in row["failure_reasons"]
+
+
+def test_pre_v3_unavailable_months_are_not_required_by_structural_validator(tmp_path):
+    config_path = _config_path(tmp_path, warmup="2015-09")
+    result = _run(
+        tmp_path,
+        _daily_rows(months=("2015-09", "2015-10", "2015-11")),
+        config_path=config_path,
+    )
+    row = result.symbol_diagnostics.loc[result.symbol_diagnostics["symbol"] == "XAUUSD"].iloc[0]
+    assert row["validation_status"] == "pass"
+    assert row["missing_calendar_months"] == []
+
+
+def test_missing_month_from_2015_09_onward_still_fails(tmp_path):
+    config_path = _config_path(tmp_path, warmup="2015-09")
+    result = _run(
+        tmp_path,
+        _daily_rows(months=("2015-10", "2015-11")),
+        config_path=config_path,
+    )
+    row = result.symbol_diagnostics.loc[result.symbol_diagnostics["symbol"] == "XAUUSD"].iloc[0]
+    assert row["validation_status"] == "fail"
+    assert "2015-09" in row["missing_calendar_months"]
     assert "missing_calendar_months" in row["failure_reasons"]
 
 

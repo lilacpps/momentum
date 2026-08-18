@@ -46,6 +46,12 @@ calendar month.
 The v2 structural validator performs only minimal fail-fast checks and passes
 the same validated prepared Daily dataset to fingerprinting and M1A.
 
+The current Track B freeze v3 requests prepared Daily data from `2015-09`
+through `2026-06`. `2015-09` through `2016-12` is warmup history. The first
+Development outcome is `2017-01`, whose formation month is `2016-12` and whose
+past-12m price begins at `2015-12`; therefore the v3 availability change does
+not remove any Development sample.
+
 Statsmodels robust results are the inference authority for one-way HAC and
 calendar-month cluster confidence intervals: `conf_int()` and `t_test()` are
 used directly with the frozen covariance options. For pooled cluster results,

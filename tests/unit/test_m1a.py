@@ -34,7 +34,7 @@ def _session_close(month: pd.Period) -> pd.Timestamp:
     return local.tz_convert("UTC")
 
 
-def _daily_fixture(start: str = "2015-01", end: str = "2024-01", symbols=("XAUUSD", "EURUSD")) -> pd.DataFrame:
+def _daily_fixture(start: str = "2015-09", end: str = "2024-01", symbols=("XAUUSD", "EURUSD")) -> pd.DataFrame:
     periods = pd.period_range(start, end, freq="M")
     rows = []
     for symbol_index, symbol in enumerate(symbols):
@@ -92,7 +92,14 @@ def track_b_config():
 
 def test_config_loader_validates_current_frozen_artifact(track_b_config):
     assert track_b_config.status == "frozen"
-    assert track_b_config.freeze_version == 2
+    assert track_b_config.freeze_version == 3
+    assert track_b_config.warmup_data_start == pd.Period("2015-09")
+    assert track_b_config.raw["previous_freeze_version"] == 2
+    assert track_b_config.raw["change_reason"] == (
+        "2015-01 through 2015-08 prepared historical OHLC is unavailable; "
+        "the earliest consistently available prepared data begins in 2015-09. "
+        "This change is made before viewing Track B predictive or performance results."
+    )
     assert track_b_config.split_assignment_basis == "next_1m_return_outcome_month"
     assert track_b_config.boundary_timezone == "UTC"
     assert "price_type" in track_b_config.raw
@@ -218,13 +225,27 @@ def test_outcome_month_split_and_final_holdout_is_not_returned_by_analysis(track
 
 
 def test_warmup_is_history_but_first_development_outcome_is_assigned_by_outcome_month(track_b_config):
-    built = _build_synthetic_monthly_observations(_daily_fixture(), track_b_config)
+    data = _daily_fixture()
+    built = _build_synthetic_monthly_observations(data, track_b_config)
     first_development = built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["outcome_month"] == pd.Period("2017-01"))
     ].iloc[0]
     assert first_development["formation_month"] == pd.Period("2016-12")
     assert first_development["split"] == "development"
+    past_12m_price = data.loc[
+        (data["symbol"] == "XAUUSD")
+        & (data["timestamp"] == _session_close(pd.Period("2015-12"))),
+        "close",
+    ].iloc[0]
+    formation_price = data.loc[
+        (data["symbol"] == "XAUUSD")
+        & (data["timestamp"] == _session_close(pd.Period("2016-12"))),
+        "close",
+    ].iloc[0]
+    assert first_development["past_12m_return"] == pytest.approx(
+        formation_price / past_12m_price - 1.0
+    )
     warmup = built.observations.loc[
         (built.observations["symbol"] == "XAUUSD")
         & (built.observations["outcome_month"] == pd.Period("2016-12"))
@@ -351,7 +372,7 @@ def test_rank_deficient_bootstrap_returns_unavailable_row(track_b_config):
 
 def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
     symbols = track_b_config.primary_symbols + (track_b_config.secondary_symbols[0],)
-    data = _daily_fixture(start="2015-01", end="2024-01", symbols=symbols)
+    data = _daily_fixture(start="2015-09", end="2024-01", symbols=symbols)
     primary_statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
     failed_secondary = {**primary_statuses, **{
         symbol: "fail" for symbol in track_b_config.secondary_symbols
@@ -399,7 +420,7 @@ def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
 
 
 def test_eligible_secondary_missing_from_input_fails_fast(track_b_config):
-    data = _daily_fixture(start="2015-01", end="2024-01", symbols=track_b_config.primary_symbols)
+    data = _daily_fixture(start="2015-09", end="2024-01", symbols=track_b_config.primary_symbols)
     statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
     statuses.update({symbol: "fail" for symbol in track_b_config.secondary_symbols})
     statuses[track_b_config.secondary_symbols[0]] = "pass"
@@ -469,7 +490,7 @@ def test_public_surface_only_exposes_track_b_runner(track_b_config):
 
 def test_track_b_runner_gates_and_excludes_holdout_and_failed_secondary(track_b_config):
     symbols = track_b_config.primary_symbols + track_b_config.secondary_symbols + ("EXTRA",)
-    data = _daily_fixture(start="2015-01", end="2024-01", symbols=symbols)
+    data = _daily_fixture(start="2015-09", end="2024-01", symbols=symbols)
     statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
     statuses.update({symbol: "fail" for symbol in track_b_config.secondary_symbols})
     result = run_m1a_track_b(
@@ -495,7 +516,7 @@ def test_track_b_runner_gates_and_excludes_holdout_and_failed_secondary(track_b_
 
 
 def test_track_b_summary_binds_daily_fingerprint_and_freeze(track_b_config):
-    data = _daily_fixture(start="2015-01", end="2024-01", symbols=track_b_config.primary_symbols)
+    data = _daily_fixture(start="2015-09", end="2024-01", symbols=track_b_config.primary_symbols)
     statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
     summary = _validation_summary(track_b_config, data, status_by_symbol=statuses)
     result = run_m1a_track_b(data, track_b_config, summary, include_sensitivity=False)

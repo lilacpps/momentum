@@ -99,7 +99,8 @@ artifactは既に存在し、concrete valuesは`config/research_track_b.yaml`が
 
 ### Track B freeze artifact version policy
 
-- `freeze_version` fieldはinteger conventionです。current valueは`2`で、旧`v1` artifactは`config/archive/research_track_b_v1.yaml`に保持します。
+- `freeze_version` fieldはinteger conventionです。current valueは`3`で、旧`v1`/`v2` artifactは
+  `config/archive/research_track_b_v1.yaml`/`config/archive/research_track_b_v2.yaml`に保持します。
 - freeze artifactは分析開始後にin-place変更しません。`freeze_version: 1`の値を後から上書きすることは禁止します。
 - freeze項目を変更する場合は、旧artifactを保持したまま、理由付きの新version（例: `freeze_version: 2`）を作成します。
 - 新versionには少なくとも`freeze_date`、`freeze_version`、変更理由、変更対象、旧versionとの関係を記録します。
@@ -113,11 +114,13 @@ predictor formation monthではなく、next-month returnのoutcome monthで決�
 monthが`2023-12`、next-1m outcome monthが`2024-01`なら、そのobservationはFinal Holdoutに所属します。
 split境界をまたぐfuture returnを直前splitへ混入させません。
 
-`warmup_data_start`の`2015-01`はDevelopment開始ではありません。これはDevelopment開始時点から
+`warmup_data_start`の`2015-09`はDevelopment開始ではありません。これはDevelopment開始時点から
 past-12-month return等のcausal predictorを作成し、必要なstateを初期化するためのpre-sample historyです。
 warmup observationsはDevelopment / Validation / Final Holdoutの評価sampleに含めず、predictor formation
-とstate initializationだけに利用します。future informationは利用せず、split assignmentは常にoutcome
-monthで決定します。実データの取得対象は`2015-01`から`2026-06`までです。
+とstate initializationだけに利用します。最初のDevelopment outcome `2017-01`はformation month
+`2016-12`のpast-12m price `2015-12`を必要とするため、`2015-09`開始でもDevelopment sampleは失われません。
+future informationは利用せず、split assignmentは常にoutcome monthで決定します。実データの取得対象は
+`2015-09`から`2026-06`までです。
 
 ### Track B universe policy
 
@@ -187,7 +190,7 @@ range-filtered and remains a failure.
 - OHLC numeric / finite / positive
 - `nonfinite_or_invalid_ohlc_rows`は異常cell数ではなく、異常を含むunique row数
 - `high >= open, close`、`low <= open, close`、`high >= low`
-- requested range filtering (`2015-01`〜`2026-06`、current artifact値)
+- requested range filtering (`2015-09`〜`2026-06`、current artifact値)
 - requested UTC calendar monthがすべて少なくとも1本のDaily barを持つこと
 
 malformed、unsorted、duplicate、invalid OHLCはrepairせずfail/errorとする。raw tick adapter、per-tick
@@ -419,7 +422,8 @@ for `t <= T` が変化してはなりません。
 
 # Track B Structural Validation v1 Implementation Convention
 
-This section is retained only for historical v1 provenance. It is superseded by the v2 section above and
+This section is retained only for historical v1 provenance. It is superseded by the current v2 structural
+contract and v3 freeze artifact above and
 must not be used by the current loader or M1A path. `docs/03_data_and_costs.md` remains authoritative for
 current data semantics, and `docs/07_academic_validation_spec.md` remains authoritative for M1A methodology.
 
@@ -434,7 +438,7 @@ structural_spec_version = track-b-structural-v1
 dataset_fingerprint_algorithm = track-b-daily-sha256-v1
 ```
 
-The current requested range is `2015-01` through `2026-06`, inclusive. The integer `freeze_version` is read from the current Track B artifact. A freeze artifact is never modified in place; an objectively justified change creates a new integer version with its reason and affected fields recorded.
+The historical v1 requested range was `2015-01` through `2026-06`, inclusive. The integer `freeze_version` is read from the current Track B artifact. A freeze artifact is never modified in place; an objectively justified change creates a new integer version with its reason and affected fields recorded.
 
 ## Canonical raw tick adapter input
 

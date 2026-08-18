@@ -137,8 +137,10 @@ next_1m_return[M]  = month_end_price[M+1] / month_end_price[M] - 1
 
 これは統計的predictability用であり、tradable next-open PnLとは別です。
 
-Track B frozen contractの取得対象は`2015-01`から`2026-06`です。`2015-01`から`2016-12`はwarmup / pre-development
-historyであり、Development outcome sampleは`2017-01`から開始します。split所属はformation monthではなく
+Track B frozen contractの取得対象は`2015-09`から`2026-06`です。`2015-09`から`2016-12`はwarmup / pre-development
+historyであり、Development outcome sampleは`2017-01`から開始します。最初のDevelopment outcome `2017-01`の
+formation monthは`2016-12`で、必要なpast-12m priceは`2015-12`です。そのため`2015-09`開始でもDevelopment
+sampleは失われません。split所属はformation monthではなく
 `next_1m_return` outcome monthで決定します。詳細なfreeze policyは`docs/04_validation_policy.md`、
 具体値は`config/research_track_b.yaml`を参照します。
 

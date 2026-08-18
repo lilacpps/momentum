@@ -1,7 +1,7 @@
-freeze_version: 3
-freeze_date: "2026-08-19"
+freeze_version: 2
+freeze_date: "2026-08-18"
 
-warmup_data_start: "2015-09"
+warmup_data_start: "2015-01"
 
 development_period:
   start: "2017-01"
@@ -45,15 +45,16 @@ daily_bar_boundary:
   calendar_month_timezone: UTC
   ny17_conversion_required: false
 
-previous_freeze_version: 2
+previous_freeze_version: 1
 change_reason: >-
-  2015-01 through 2015-08 prepared historical OHLC is unavailable; the
-  earliest consistently available prepared data begins in 2015-09. This
-  change is made before viewing Track B predictive or performance results.
+  Engineering/data-pipeline simplification before predictive or performance
+  results are viewed: prepared Exness Bid OHLC is now the research input
+  authority. Track B no longer revalidates raw ticks or reconstructs Daily
+  OHLC from 1m data; M1A v2 consumes prepared 1d OHLC directly.
 changed_fields:
-  - warmup_data_start
-  - requested_range
-  - data_availability
+  - data_source
+  - daily_bar_boundary
+  - structural_validation_input
 status: frozen
 
 notes: >-
@@ -62,9 +63,7 @@ notes: >-
   bar label is a UTC calendar timestamp and is not converted to a nominal
   New York 17:00 close. Small differences around the NY17 boundary are an
   accepted non-material implementation convention for the v2 Practical
-  Track. Historical prepared OHLC is available from 2015-09 onward. The
-  2015-09 through 2016-12 period is warmup history; the first Development
-  outcome remains 2017-01 and requires the 2015-12 past-12m price.
+  Track.
   The warmup period is used only for predictor formation and state
   initialization and is excluded from Development, Validation, and Final
   Holdout evaluation samples. The primary and secondary universes are
