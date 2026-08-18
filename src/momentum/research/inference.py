@@ -14,6 +14,7 @@ from statsmodels.stats.sandwich_covariance import cov_cluster_2groups
 SPEC_VERSION = "m1a-practical-v1"
 CONFIDENCE_LEVEL = 0.95
 HAC_LAG = 12
+INFERENCE_OUTPUT_FIELDS = ("standard_error", "t_stat", "ci_lower", "ci_upper")
 HAC_OPTIONS = {
     "kernel": "bartlett",
     "maxlags": HAC_LAG,
@@ -53,6 +54,18 @@ class BootstrapSummary:
     successful_draws: int
     failed_draws: int
     metadata: dict[str, Any]
+
+
+def inference_outputs_are_finite(summary: dict[str, Any]) -> bool:
+    """Return whether all required inferential outputs are finite scalars."""
+    # A successful statsmodels fit can still expose invalid robust inference.
+    try:
+        return all(
+            bool(np.isfinite(float(summary[field])))
+            for field in INFERENCE_OUTPUT_FIELDS
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def point_estimate(y: np.ndarray, x: np.ndarray) -> np.ndarray:

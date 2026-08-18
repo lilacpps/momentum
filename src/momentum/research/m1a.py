@@ -23,6 +23,7 @@ from momentum.research.inference import (
     SPEC_VERSION,
     _fit_statsmodels,
     coefficient_summary,
+    inference_outputs_are_finite,
     linear_combination_summary,
     moving_block_bootstrap,
     outcome_months_are_consecutive,
@@ -178,13 +179,18 @@ def _regression_row(
         "alpha": float(params[0]) if params is not None else float("nan"),
         "beta": float(params[1]) if params is not None else float("nan"),
         "nobs": int(len(frame)),
-        "inference_status": "available" if fitted is not None else "unavailable",
-        "inference_unavailable_reason": unavailable_reason,
         "regression_method": "OLS",
         "small_sample_correction": True,
     })
     if fitted is not None:
-        row.update(coefficient_summary(fitted))
+        summary = coefficient_summary(fitted)
+        row.update(summary)
+        if inference_outputs_are_finite(summary):
+            row["inference_status"] = "available"
+            row["inference_unavailable_reason"] = None
+        else:
+            row["inference_status"] = "unavailable"
+            row["inference_unavailable_reason"] = "nonfinite_inference_output"
         row.update(fitted.metadata)
     else:
         row.update({
@@ -192,6 +198,8 @@ def _regression_row(
             "t_stat": float("nan"),
             "ci_lower": float("nan"),
             "ci_upper": float("nan"),
+            "inference_status": "unavailable",
+            "inference_unavailable_reason": unavailable_reason,
             "covariance_options": {
                 "kernel": "bartlett",
                 "maxlags": HAC_LAG,
@@ -285,8 +293,12 @@ def _sign_conditioned_rows(
         if fitted is not None:
             summary = linear_combination_summary(fitted, weights)
             row.update(summary)
-            row["inference_status"] = "available"
-            row["inference_unavailable_reason"] = None
+            if inference_outputs_are_finite(summary):
+                row["inference_status"] = "available"
+                row["inference_unavailable_reason"] = None
+            else:
+                row["inference_status"] = "unavailable"
+                row["inference_unavailable_reason"] = "nonfinite_inference_output"
             row.update(fitted.metadata)
         else:
             estimate = float(weights[0] * params[0] + weights[1] * params[1]) if params is not None else float("nan")
@@ -404,12 +416,16 @@ def _bootstrap_row(config: TrackBConfig, frame: pd.DataFrame, split: str, analys
         "ci_lower": bootstrap.ci_lower,
         "ci_upper": bootstrap.ci_upper,
         "nobs": int(len(frame)),
-        "inference_status": "available",
-        "inference_unavailable_reason": None,
         "regression_method": "OLS",
         "small_sample_correction": False,
         **bootstrap.metadata,
     })
+    if inference_outputs_are_finite(row):
+        row["inference_status"] = "available"
+        row["inference_unavailable_reason"] = None
+    else:
+        row["inference_status"] = "unavailable"
+        row["inference_unavailable_reason"] = "nonfinite_inference_output"
     return row
 
 

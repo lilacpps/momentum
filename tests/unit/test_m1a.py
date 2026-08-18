@@ -13,8 +13,9 @@ from momentum.data.track_b import (
     compute_track_b_daily_fingerprint,
     validate_track_b_daily,
 )
-from momentum.research.inference import moving_block_bootstrap, outcome_months_are_consecutive
-from momentum.research.m1a import _run_m1a_synthetic
+from momentum.research.inference import FittedInference, moving_block_bootstrap, outcome_months_are_consecutive
+from momentum.research.m1a import _regression_row, _run_m1a_synthetic, _sign_conditioned_rows
+import momentum.research.m1a as m1a_module
 from momentum.research import run_m1a_track_b
 from momentum.research.track_b_config import (
     SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
@@ -283,6 +284,82 @@ def test_m1a_results_have_primary_metadata_and_zero_semantics(track_b_config):
     assert pooled["degrees_of_freedom_expected"] == 59
     assert pooled["statsmodels_df_resid_inference"] == 59
     assert pooled["df_validation_status"] == "match"
+
+    normal_result = _run_m1a_synthetic(_varying_daily_fixture(), track_b_config, include_sensitivity=False)
+    required_outputs = ("standard_error", "t_stat", "ci_lower", "ci_upper")
+    for table in (normal_result.regression_results, normal_result.sign_conditioned_results):
+        available = table.loc[table["inference_status"] == "available"]
+        assert not available.empty
+        for field in required_outputs:
+            assert np.isfinite(available[field].to_numpy(dtype="float64")).all()
+
+
+def test_nonfinite_inference_output_is_unavailable_for_fit_backed_results(
+    track_b_config, monkeypatch,
+):
+    class FakeTest:
+        effect = np.array([0.25])
+        sd = np.array([np.nan])
+        tvalue = np.array([np.nan])
+
+        def conf_int(self, alpha):
+            return np.array([[np.nan, 0.5]])
+
+    class FakeResult:
+        params = np.array([0.1, 0.25])
+        bse = np.array([0.1, np.nan])
+        tvalues = np.array([1.0, np.nan])
+
+        def conf_int(self, alpha):
+            return np.array([[-0.1, 0.3], [np.nan, 0.5]])
+
+        def t_test(self, contrast, use_t):
+            return FakeTest()
+
+    fitted = FittedInference(
+        params=np.array([0.1, 0.25]),
+        covariance=np.eye(2),
+        degrees_of_freedom=10.0,
+        nobs=4,
+        metadata={"covariance_method": "HAC"},
+        result=FakeResult(),
+    )
+    monkeypatch.setattr(m1a_module, "_fit_statsmodels", lambda *args, **kwargs: fitted)
+    observations = _build_synthetic_monthly_observations(
+        _varying_daily_fixture(), track_b_config,
+    ).observations
+    frame = observations.loc[
+        (observations["symbol"] == "XAUUSD")
+        & (observations["split"] == "development")
+    ].copy()
+
+    regression = _regression_row(
+        track_b_config,
+        frame,
+        split="development",
+        symbol="XAUUSD",
+        predictor_column="past_12m_return",
+        analysis_name="continuous_regression",
+        predictor_definition="past_12m_return",
+        covariance_method="HAC",
+        symbol_level=True,
+    )
+    assert regression["beta"] == pytest.approx(0.25)
+    assert regression["inference_status"] == "unavailable"
+    assert regression["inference_unavailable_reason"] == "nonfinite_inference_output"
+
+    sign_rows = _sign_conditioned_rows(
+        track_b_config, frame, "development", "XAUUSD", pooled=False,
+    )
+    assert {row["metric"] for row in sign_rows} == {
+        "positive_mean", "negative_mean", "difference",
+    }
+    assert all(row["estimate"] == pytest.approx(0.25) for row in sign_rows)
+    assert all(row["inference_status"] == "unavailable" for row in sign_rows)
+    assert all(
+        row["inference_unavailable_reason"] == "nonfinite_inference_output"
+        for row in sign_rows
+    )
 
 
 def test_rank_deficient_design_is_unavailable(track_b_config):
