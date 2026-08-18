@@ -23,8 +23,23 @@ def gross_metrics(
     windowed = sample_start is not None
     if windowed and sample_start >= sample_end:
         raise ValueError("sample_start must be before sample_end")
+    if windowed:
+        sample_start = pd.Timestamp(sample_start)
+        sample_end = pd.Timestamp(sample_end)
+        if sample_start.tzinfo is None:
+            sample_start = sample_start.tz_localize("UTC")
+        else:
+            sample_start = sample_start.tz_convert("UTC")
+        if sample_end.tzinfo is None:
+            sample_end = sample_end.tz_localize("UTC")
+        else:
+            sample_end = sample_end.tz_convert("UTC")
 
-    timestamps = pd.to_datetime(bars["timestamp"]) if "timestamp" in bars else pd.Series(dtype="datetime64[ns]")
+    timestamps = (
+        pd.to_datetime(bars["timestamp"], utc=True)
+        if "timestamp" in bars
+        else pd.Series(dtype="datetime64[ns, UTC]")
+    )
     if windowed:
         return_window_mask = (timestamps >= sample_start) & (timestamps < sample_end)
         event_mask = (timestamps >= sample_start) & (timestamps <= sample_end)
@@ -62,11 +77,11 @@ def gross_metrics(
         position_change_events = 0
 
     if len(ledger):
-        entry_timestamps = pd.to_datetime(ledger["entry_timestamp"])
-        exit_timestamps = pd.to_datetime(ledger["exit_timestamp"])
+        entry_timestamps = pd.to_datetime(ledger["entry_timestamp"], utc=True)
+        exit_timestamps = pd.to_datetime(ledger["exit_timestamp"], utc=True)
     else:
-        entry_timestamps = pd.Series(dtype="datetime64[ns]")
-        exit_timestamps = pd.Series(dtype="datetime64[ns]")
+        entry_timestamps = pd.Series(dtype="datetime64[ns, UTC]")
+        exit_timestamps = pd.Series(dtype="datetime64[ns, UTC]")
 
     if windowed:
         started = (entry_timestamps >= sample_start) & (entry_timestamps <= sample_end)
@@ -92,8 +107,8 @@ def gross_metrics(
         carry_out_count = 0
 
     if len(metric_ledger):
-        metric_entries = pd.to_datetime(metric_ledger["entry_timestamp"])
-        metric_exits = pd.to_datetime(metric_ledger["exit_timestamp"])
+        metric_entries = pd.to_datetime(metric_ledger["entry_timestamp"], utc=True)
+        metric_exits = pd.to_datetime(metric_ledger["exit_timestamp"], utc=True)
         if windowed:
             closed_mask = (
                 metric_ledger["status"].eq("closed")
@@ -110,10 +125,18 @@ def gross_metrics(
     interval_holdings: list[int] = []
     calendar_holdings: list[float] = []
     if len(closed_episodes) and "timestamp" in bars:
-        timestamp_values = pd.Series(pd.to_datetime(bars["timestamp"]).tolist())
+        timestamp_values = pd.Series(pd.to_datetime(bars["timestamp"], utc=True).tolist())
         for row in closed_episodes.itertuples(index=False):
             entry_timestamp = pd.Timestamp(row.entry_timestamp)
             exit_timestamp = pd.Timestamp(row.exit_timestamp)
+            if entry_timestamp.tzinfo is None:
+                entry_timestamp = entry_timestamp.tz_localize("UTC")
+            else:
+                entry_timestamp = entry_timestamp.tz_convert("UTC")
+            if exit_timestamp.tzinfo is None:
+                exit_timestamp = exit_timestamp.tz_localize("UTC")
+            else:
+                exit_timestamp = exit_timestamp.tz_convert("UTC")
             if windowed:
                 entry_timestamp = max(entry_timestamp, pd.Timestamp(sample_start))
             intervals = ((timestamp_values >= entry_timestamp) & (timestamp_values < exit_timestamp)).sum()

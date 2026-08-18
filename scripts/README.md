@@ -48,3 +48,24 @@ Example command for a later explicitly requested real-data run:
 ```text
 python -c "from momentum.data.structural_validation import run_track_b_structural_validation; run_track_b_structural_validation()"
 ```
+
+## Track B M2 real historical execution and comparison
+
+After M1A is complete for the current freeze, use:
+
+```text
+python scripts/run_m2.py
+```
+
+The command reruns structural validation, verifies the complete dataset
+identity, and independently executes the eight frozen primary symbols. For
+each symbol it derives one canonical Development+Validation execution window
+and passes the same truncated Daily frame and boundaries to M0 and M2. It
+hard-fails on window, return-count, terminal-boundary, or holdout leakage
+mismatches. Final Holdout execution is not exposed by this API.
+
+Successful artifacts are written atomically under
+`results/m2/freeze_v3_<timestamp>/` with `comparison.csv`, `report.md`,
+identity metadata, structural-validation artifacts, and per-symbol M0/M2
+bars, ledgers, and metrics. Gate M2 #7 is reported from construction and
+accounting invariants; it is not inferred from performance.

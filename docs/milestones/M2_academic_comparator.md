@@ -1,9 +1,24 @@
 # M2 — Practical Monthly Comparator
 
 ## Status
-M1A Practical Predictability is complete for current Track B freeze v3. M2 contract and implementation are
-complete; full M2 result execution and comparison report are pending. M1B MOP Regression Comparator and M1C Huang
-Reference Challenge may remain pending without blocking this Practical Track milestone.
+M1A Practical Predictability is complete for current Track B freeze v3. M2
+contract, implementation, real historical execution, and comparison report
+are complete. M1B MOP Regression Comparator and M1C Huang Reference Challenge
+may remain pending without blocking this Practical Track milestone.
+
+## Execution identity
+
+- freeze_version: 3
+- m2_spec_version: m2-practical-v1
+- structural_spec_version: track-b-structural-v2
+- dataset_fingerprint: 8dafe0355b65e382ab268485b858c2cc64070fabe3d2f4fd6d0a8db3b7292925
+- dataset_fingerprint_algorithm: track-b-daily-sha256-v1
+- execution_timestamp: 2026-08-18T22:52:47.116231+00:00
+- executed_symbols: 8/8 frozen primary symbols
+- Gate M2: PASS
+
+Performance values are retained in the versioned result artifact and are not
+copied into this milestone document.
 
 ## 目的
 M0のdaily refresh / reversal仕様と、academic literatureに近いmonthly formation / holding仕様との差を分離する。

@@ -93,7 +93,8 @@ M1はM3 multi-symbol backtest engineを要求しません。
 M1A Practical Predictability完了後に開始可能。M1B/M1Cのreference workstreamは並行して進め、
 未完でもM2をblockしない。
 
-M2のcontractとimplementationはcomplete。full result executionとM0共通intervalでの比較reportはpending。
+M2のcontract、implementation、real historical execution、およびM0共通intervalでの比較reportはcomplete。
+execution identityは`docs/milestones/M2_academic_comparator.md`に記録し、performance値はmilestone文書へ転記しない。
 
 ### 初期仕様
 

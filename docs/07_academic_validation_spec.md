@@ -802,7 +802,26 @@ timezone
 daily_boundary
 result_level = gross_price_only
 academic_mop_replication = false
+final_holdout_included = false
+sample_start_timestamp
+sample_end_timestamp
+accounting_engine = shared_daily_open_to_open_v1
 ```
+
+The production comparison runner derives one canonical execution window per
+symbol from the validation canonical Daily dataset. It passes the same
+`sample_start`, `sample_end`, and truncated execution frame to M0 and M2.
+Before saving an artifact it hard-checks the boundary timestamps, first and
+last evaluation return timestamps, return count, and the complete evaluation
+return interval. The terminal boundary row remains in both bars files, has
+`asset_return = NaN` and `strategy_return = NaN`, and no later bar or return is
+allowed.
+
+Gate M2 #7 is an implementation invariant, not a performance judgment. It
+passes only when M0 and M2 use the same frozen input identity, symbol, market
+contract, canonical window, and shared daily Open-to-Open accounting, while
+their documented daily and monthly construction rules are the only difference.
+The runner does not infer this gate from which strategy performs better.
 
 ## 7.8 Metric definitions
 

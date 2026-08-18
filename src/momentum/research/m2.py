@@ -30,6 +30,8 @@ def run_m2_track_b(
     validation_summary: StructuralValidationSummary,
     *,
     symbol: str,
+    sample_start: pd.Timestamp | None = None,
+    sample_end: pd.Timestamp | None = None,
 ) -> BacktestResult:
     """Run M2 independently for one frozen primary symbol.
 
@@ -74,6 +76,12 @@ def run_m2_track_b(
             f"missing terminal execution boundary month: {boundary_month}"
         )
     boundary_timestamp = boundary_rows["timestamp"].iloc[0]
+    if sample_end is not None and pd.Timestamp(sample_end) != pd.Timestamp(boundary_timestamp):
+        raise TrackBDailyValidationError(
+            "M2 sample_end does not match the canonical validation boundary"
+        )
+    if sample_start is not None:
+        sample_start = pd.Timestamp(sample_start)
     execution_mask = (full_calendar >= config.warmup_data_start) & (
         selected_full["timestamp"] <= boundary_timestamp
     )
@@ -102,6 +110,9 @@ def run_m2_track_b(
         "result_level": "gross_price_only",
         "academic_mop_replication": False,
         "final_holdout_included": False,
+        "construction_rule": "12_calendar_month_formation_next_month_first_open",
+        "split_assignment": "holding_month",
+        "accounting_engine": "shared_daily_open_to_open_v1",
     }
     result = run_target_backtest(
         selected,
@@ -120,7 +131,13 @@ def run_m2_track_b(
         raise TrackBDailyValidationError(
             f"missing terminal execution boundary month: {boundary_month}"
         )
-    sample_start = timestamp.loc[calendar == config.development.start].iloc[0]
+    derived_sample_start = timestamp.loc[calendar == config.development.start].iloc[0]
+    if sample_start is None:
+        sample_start = derived_sample_start
+    elif sample_start != derived_sample_start:
+        raise TrackBDailyValidationError(
+            "M2 sample_start does not match the canonical Development boundary"
+        )
     _, m0_target = generate_m0_signals(selected["close"])
     comparable = generated.rebalance & (calendar >= config.development.start) & (calendar <= max_month)
     agreement = float(
@@ -133,7 +150,12 @@ def run_m2_track_b(
         sample_end=boundary_timestamp,
     )
     metrics["signal_direction_agreement"] = agreement
-    return replace(result, bars=bars, metrics=metrics)
+    result_metadata = dict(result.metadata)
+    result_metadata.update({
+        "sample_start_timestamp": pd.Timestamp(sample_start).isoformat(),
+        "sample_end_timestamp": pd.Timestamp(boundary_timestamp).isoformat(),
+    })
+    return replace(result, bars=bars, metrics=metrics, metadata=result_metadata)
 
 
 __all__ = ["run_m2_track_b"]
