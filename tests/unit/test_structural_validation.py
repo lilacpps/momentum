@@ -77,8 +77,16 @@ def _complete_rows(symbol: str):
     return rows
 
 
-def test_real_schema_mapping_and_explicit_utc_z_are_fixed():
-    sample = next((ROOT / "data" / "raw" / "XAUUSD").glob("*.csv"))
+def test_synthetic_schema_mapping_and_explicit_utc_z_are_fixed(tmp_path):
+    sample = _write_csv(tmp_path, "XAUUSD", "sample.csv", [
+        {
+            "Exness": "exness",
+            "Symbol": "XAUUSD",
+            "Timestamp": _utc_z("2020-01-15"),
+            "Bid": 1.0,
+            "Ask": 1.1,
+        },
+    ])
     header = pd.read_csv(sample, nrows=0).columns.tolist()
     assert header == list(EXNESS_REQUIRED_COLUMNS)
     first = pd.read_csv(sample, nrows=3, dtype=object)
@@ -110,7 +118,7 @@ def test_invalid_timestamp_bid_and_zero_based_source_row_are_counted(tmp_path):
     config = _config(tmp_path)
     root = tmp_path / "raw"
     rows = [
-        {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": "bad", "Bid": "1", "Ask": "1"},
+        {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": "bad", "Bid": "nan", "Ask": "1"},
         {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": "2020-01-15 18:00:00", "Bid": "1", "Ask": "1"},
         {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": _utc_z("2020-02-15"), "Bid": "nan", "Ask": "1"},
         {"Exness": "exness", "Symbol": "XAUUSD", "Timestamp": _utc_z("2020-03-15"), "Bid": "-1", "Ask": "1"},
@@ -181,6 +189,11 @@ def test_out_of_order_sqlite_fallback_matches_sorted_fast_path(tmp_path):
     second = run_track_b_structural_validation(fallback_root, config, chunksize=1)
     pd.testing.assert_frame_equal(first.daily_ohlc, second.daily_ohlc)
     assert second.symbol_diagnostics.set_index("symbol").loc["XAUUSD", "out_of_order_detected"]
+    expected_first = pd.Timestamp(rows[0]["Timestamp"])
+    expected_last = pd.Timestamp(rows[2]["Timestamp"])
+    fallback_diagnostics = second.symbol_diagnostics.set_index("symbol").loc["XAUUSD"]
+    assert fallback_diagnostics["first_valid_tick"] == expected_first
+    assert fallback_diagnostics["last_valid_tick"] == expected_last
     assert first.summary.dataset_fingerprint == second.summary.dataset_fingerprint
 
 
@@ -213,11 +226,16 @@ def test_exact_previous_and_current_boundary_and_golden_ohlc(tmp_path):
     ])
     _write_csv(root, "EURJPY", "ticks.csv", _monthly_rows("EURJPY"))
     result = run_track_b_structural_validation(root, config)
-    bar = result.daily_ohlc.loc[
+    previous_bar = result.daily_ohlc.loc[
         (result.daily_ohlc["symbol"] == "XAUUSD")
         & (result.daily_ohlc["timestamp"] == pd.Timestamp("2020-01-15 22:00", tz="UTC"))
     ].iloc[0]
-    assert (bar[["open", "high", "low", "close"]].tolist()) == [4.0, 5.0, 1.0, 1.0]
+    next_bar = result.daily_ohlc.loc[
+        (result.daily_ohlc["symbol"] == "XAUUSD")
+        & (result.daily_ohlc["timestamp"] == pd.Timestamp("2020-01-16 22:00", tz="UTC"))
+    ].iloc[0]
+    assert previous_bar[["open", "high", "low", "close"]].tolist() == [4.0, 4.0, 4.0, 4.0]
+    assert next_bar[["open", "high", "low", "close"]].tolist() == [2.0, 5.0, 1.0, 1.0]
 
 
 def test_missing_month_and_missing_source_are_failures_without_silent_skip(tmp_path):
@@ -262,6 +280,30 @@ def test_clean_status_and_daily_validation_fingerprint_identity(tmp_path):
     changed = validated.copy()
     changed.loc[0, "close"] += 0.001
     assert compute_track_b_daily_fingerprint(changed) != result.summary.dataset_fingerprint
+
+
+def test_requested_range_excludes_out_of_range_daily_and_fingerprint(tmp_path):
+    config_path = _config(tmp_path)
+    base_root = tmp_path / "base"
+    extra_root = tmp_path / "extra"
+    for symbol in ("XAUUSD", "EURJPY"):
+        base_rows = _complete_rows(symbol)
+        extra = {
+            "Exness": "exness",
+            "Symbol": symbol,
+            "Timestamp": _utc_z("2020-04-15"),
+            "Bid": 999.0,
+            "Ask": 999.1,
+        }
+        _write_csv(base_root, symbol, "ticks.csv", base_rows)
+        _write_csv(extra_root, symbol, "ticks.csv", base_rows + [extra])
+
+    base = run_track_b_structural_validation(base_root, config_path)
+    extra = run_track_b_structural_validation(extra_root, config_path)
+    pd.testing.assert_frame_equal(base.daily_ohlc, extra.daily_ohlc)
+    assert base.summary.dataset_fingerprint == extra.summary.dataset_fingerprint
+    local_months = extra.daily_ohlc["timestamp"].dt.tz_convert("America/New_York").dt.month
+    assert local_months.max() == 3
 
 
 def test_generatable_failed_secondary_remains_in_daily_and_fingerprint(tmp_path):

@@ -13,8 +13,7 @@ timestamp rather than localising naive values implicitly.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
-import math
+from datetime import datetime, time, timedelta
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -106,13 +105,16 @@ class _DailyBuilder:
         self.rows: list[dict[str, Any]] = []
 
     def add(self, tick: _Tick) -> None:
-        boundary = _session_boundary_utc(
-            tick.timestamp,
-            boundary_timezone=self.boundary_timezone,
-            boundary_time=self.boundary_time,
-        )
-        boundary_ns = int(boundary.value)
-        if self._boundary_ns != boundary_ns:
+        if self._boundary_ns is None or tick.timestamp_ns > self._boundary_ns:
+            # The current session is closed by the first boundary at or after
+            # the tick.  On a gap, recompute directly from this tick; do not
+            # walk through or synthesize empty intermediate sessions.
+            boundary = _session_boundary_utc(
+                tick.timestamp,
+                boundary_timezone=self.boundary_timezone,
+                boundary_time=self.boundary_time,
+            )
+            boundary_ns = int(boundary.value)
             self._emit()
             self._boundary_ns = boundary_ns
             self._open = tick.bid
@@ -181,31 +183,6 @@ def discover_track_b_source_files(data_root: str | Path, symbol: str) -> tuple[P
     return tuple(sorted(files, key=lambda path: _normalised_relative_path(path, root)))
 
 
-def _parse_explicit_timestamp(value: Any) -> pd.Timestamp | None:
-    if value is None or pd.isna(value):
-        return None
-    try:
-        timestamp = pd.Timestamp(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if pd.isna(timestamp) or timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        return None
-    try:
-        return timestamp.tz_convert("UTC")
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
-def _parse_positive_bid(value: Any) -> float | None:
-    try:
-        bid = float(value)
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if not math.isfinite(bid) or bid <= 0:
-        return None
-    return bid
-
-
 def iter_exness_ticks(
     path: str | Path,
     *,
@@ -226,7 +203,6 @@ def iter_exness_ticks(
             dtype=object,
             keep_default_na=True,
         )
-        first_chunk = True
         row_offset = 0
         for chunk in reader:
             missing = [column for column in EXNESS_REQUIRED_COLUMNS if column not in chunk.columns]
@@ -234,27 +210,47 @@ def iter_exness_ticks(
                 raise StructuralValidationError(
                     f"Exness CSV {path} is missing required columns: {missing}"
                 )
-            if first_chunk:
-                first_chunk = False
-            for local_position, values in enumerate(chunk.itertuples(index=False, name=None)):
-                row = dict(zip(chunk.columns, values))
-                row_number = row_offset + local_position
-                timestamp = _parse_explicit_timestamp(row.get("Timestamp"))
-                if timestamp is None:
-                    if diagnostics is not None and count_diagnostics:
-                        diagnostics["timestamp_parse_errors"] += 1
-                    continue
-                bid = _parse_positive_bid(row.get("Bid"))
-                if bid is None:
-                    if diagnostics is not None and count_diagnostics:
-                        diagnostics["nonfinite_or_invalid_bid_rows"] += 1
-                    continue
-                source_symbol = row.get("Symbol")
-                if source_symbol is None or str(source_symbol) != symbol:
-                    if diagnostics is not None and count_diagnostics:
-                        diagnostics["source_symbol_mismatch_count"] += 1
-                    continue
-                yield _Tick(timestamp, bid, source_file_order, row_number)
+            timestamp_text = chunk["Timestamp"].astype("string").str.strip()
+            explicit_timezone = timestamp_text.str.match(
+                r"^.*(?:[zZ]|[+-]\d{2}:?\d{2})$", na=False
+            )
+            # The explicit-timezone mask is applied before utc=True.  This
+            # prevents pandas from interpreting naive strings as UTC.
+            parsed_timestamps = pd.to_datetime(
+                chunk["Timestamp"].where(explicit_timezone),
+                errors="coerce",
+                utc=True,
+                format="mixed",
+            )
+            timestamp_valid = explicit_timezone & parsed_timestamps.notna()
+            bid_values = pd.to_numeric(chunk["Bid"], errors="coerce").to_numpy(
+                dtype="float64", na_value=np.nan
+            )
+            bid_valid = pd.Series(
+                np.isfinite(bid_values) & (bid_values > 0), index=chunk.index
+            )
+            source_symbols = chunk["Symbol"].astype("string")
+            source_symbol_matches = source_symbols.eq(symbol).fillna(False)
+            valid_timestamp_and_bid = timestamp_valid & bid_valid
+            valid_rows = valid_timestamp_and_bid & source_symbol_matches
+
+            if diagnostics is not None and count_diagnostics:
+                diagnostics["timestamp_parse_errors"] += int((~timestamp_valid).sum())
+                diagnostics["nonfinite_or_invalid_bid_rows"] += int(
+                    (timestamp_valid & ~bid_valid).sum()
+                )
+                diagnostics["source_symbol_mismatch_count"] += int(
+                    (valid_timestamp_and_bid & ~source_symbol_matches).sum()
+                )
+
+            for local_position in np.flatnonzero(valid_rows.to_numpy()):
+                position = int(local_position)
+                yield _Tick(
+                    parsed_timestamps.iloc[position],
+                    float(bid_values[position]),
+                    source_file_order,
+                    row_offset + position,
+                )
             row_offset += len(chunk)
     except pd.errors.ParserError as exc:
         raise StructuralValidationError(f"cannot parse Exness CSV {path}") from exc
@@ -266,17 +262,17 @@ def _session_boundary_utc(
     boundary_timezone: str = BOUNDARY_TZ,
     boundary_time: time = BOUNDARY_TIME,
 ) -> pd.Timestamp:
-    """Return the current NY 17:00 boundary for an explicit UTC timestamp."""
+    """Return the first NY boundary at or after an explicit UTC timestamp."""
     boundary_zone = ZoneInfo(boundary_timezone)
     local = timestamp.tz_convert(boundary_timezone)
     local_date = local.date()
     candidate = pd.Timestamp(datetime.combine(local_date, boundary_time, tzinfo=boundary_zone))
     candidate = candidate.tz_convert("UTC")
-    if timestamp < candidate:
-        previous = local_date - timedelta(days=1)
-        candidate = pd.Timestamp(datetime.combine(previous, boundary_time, tzinfo=boundary_zone))
-        candidate = candidate.tz_convert("UTC")
-    return candidate
+    if timestamp <= candidate:
+        return candidate
+    next_date = local_date + timedelta(days=1)
+    next_boundary = pd.Timestamp(datetime.combine(next_date, boundary_time, tzinfo=boundary_zone))
+    return next_boundary.tz_convert("UTC")
 
 
 def _new_diagnostics(symbol: str, config: TrackBConfig) -> dict[str, Any]:
@@ -457,6 +453,8 @@ def _process_symbol(
             # and use only its own canonical duplicate counts.
             fallback_diagnostics = {
                 **diagnostics,
+                "first_valid_tick": None,
+                "last_valid_tick": None,
                 "repeated_timestamp_count": 0,
                 "exact_duplicate_row_count": 0,
             }
@@ -479,6 +477,7 @@ def _process_symbol(
         diagnostics["failure_detail"] = str(exc)
         return _daily_frame(()), diagnostics
 
+    daily = _filter_daily_to_requested_range(daily, config)
     diagnostics["daily_bar_count"] = len(daily)
     try:
         _validate_daily_invariants(daily)
@@ -539,6 +538,22 @@ def _configured_boundary_time(config: TrackBConfig) -> time:
         ).time()
     except (KeyError, TypeError, ValueError) as exc:
         raise StructuralValidationError("invalid daily boundary local time") from exc
+
+
+def _filter_daily_to_requested_range(
+    daily: pd.DataFrame,
+    config: TrackBConfig,
+) -> pd.DataFrame:
+    """Keep only Daily rows whose local close month is requested/frozen."""
+    if daily.empty:
+        return daily.reset_index(drop=True)
+    local_dates = daily["timestamp"].dt.tz_convert(config.boundary_timezone).dt.date
+    local_months = pd.to_datetime(local_dates).dt.to_period("M")
+    selected = local_months.between(
+        config.warmup_data_start,
+        config.final_holdout.end,
+    )
+    return daily.loc[selected].reset_index(drop=True)
 
 
 def _calendar_coverage(daily: pd.DataFrame, config: TrackBConfig) -> tuple[list[str], list[str]]:
@@ -614,6 +629,7 @@ def run_track_b_structural_validation(
         pd.concat(daily_frames, ignore_index=True).to_dict("records")
         if daily_frames else ()
     )
+    daily = _filter_daily_to_requested_range(daily, config)
     try:
         _validate_daily_invariants(daily)
         daily = validate_track_b_daily(daily, config)
