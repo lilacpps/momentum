@@ -82,10 +82,15 @@ def test_cli_writes_exactly_eight_symbols_with_shared_terminal_boundary(tmp_path
     comparison = pd.read_csv(run_dir / "comparison.csv")
     assert len(comparison) == 8
     assert set(comparison["symbol"]) == set(track_b_config.primary_symbols)
+    assert comparison["signal_direction_agreement"].notna().all()
+    assert comparison["signal_direction_agreement"].between(0.0, 1.0).all()
+    assert comparison["required_metrics_pass"].astype(str).eq("True").all()
     metadata = pd.read_json(run_dir / "metadata.json", typ="series")
     assert metadata["final_holdout_included"] is False
     assert metadata["execution_identity"]["symbols_executed"] == "8/8"
     assert metadata["execution_identity"]["gate_m2"] == "PASS"
+    assert set(metadata["sample_start_by_symbol"]) == set(track_b_config.primary_symbols)
+    assert set(metadata["sample_end_by_symbol"]) == set(track_b_config.primary_symbols)
 
     for symbol in track_b_config.primary_symbols:
         symbol_dir = run_dir / "symbols" / symbol
@@ -156,6 +161,62 @@ def test_gate7_is_construction_invariant_not_performance(track_b_config):
     )
     assert gate["construction_invariant_pass"] is True
     assert gate["performance_not_used_for_gate"] is True
+
+
+def test_gate_required_metrics_is_not_count_only(track_b_config):
+    daily = _daily_fixture(track_b_config)
+    validation = _validation(track_b_config, daily)
+    item = cli._run_symbol(
+        daily,
+        track_b_config,
+        validation.summary,
+        track_b_config.primary_symbols[0],
+    )
+    broken = replace(item, required_metrics={"passed": False, "missing": ["m2.turnover"], "invalid": []})
+    gate = cli._gate_summary([broken] * len(track_b_config.primary_symbols), track_b_config)
+    assert gate["status"] == "FAIL"
+    assert gate["checks"]["required_metrics_reported"] is False
+    assert gate["required_metrics_by_symbol"][item.symbol] is False
+
+
+def _daily_warmup_fixture(symbol: str) -> pd.DataFrame:
+    timestamps = pd.date_range(
+        "2015-09-01", "2024-01-01", freq="B", tz="UTC"
+    )
+    close = 100.0 + pd.Series(range(len(timestamps)), dtype="float64")
+    return pd.DataFrame({
+        "symbol": symbol,
+        "timestamp": timestamps,
+        "open": close.to_numpy(),
+        "high": (close + 1.0).to_numpy(),
+        "low": (close - 1.0).to_numpy(),
+        "close": close.to_numpy(),
+    })
+
+
+def test_m0_m2_carry_in_state_is_continuous_at_development_start(track_b_config):
+    symbol = track_b_config.primary_symbols[0]
+    daily = _daily_warmup_fixture(symbol)
+    summary = StructuralValidationSummary(
+        freeze_version=track_b_config.freeze_version,
+        structural_spec_version=SUPPORTED_STRUCTURAL_SPEC_VERSION,
+        dataset_fingerprint=compute_track_b_daily_fingerprint(daily),
+        dataset_fingerprint_algorithm=SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
+        status_by_symbol={item: "pass" for item in track_b_config.primary_symbols},
+    )
+    item = cli._run_symbol(daily, track_b_config, summary, symbol)
+    for result in (item.m0, item.m2):
+        first = result.bars.loc[
+            pd.to_datetime(result.bars["timestamp"], utc=True).eq(item.window.sample_start)
+        ].iloc[0]
+        assert first["executed_position"] == 1
+        assert first["execution_event"] == "hold"
+        assert result.ledger["entry_timestamp"].notna().any()
+        assert (
+            pd.to_datetime(result.ledger["entry_timestamp"], utc=True) < item.window.sample_start
+        ).any()
+        assert result.metrics["carry_in_episode_count"] >= 1
+        assert result.metrics["trade_count"] == 0
 
 
 def test_cli_outputs_unique_directories_without_overwrite(tmp_path, monkeypatch, track_b_config):

@@ -806,6 +806,8 @@ final_holdout_included = false
 sample_start_timestamp
 sample_end_timestamp
 accounting_engine = shared_daily_open_to_open_v1
+sample_start_by_symbol
+sample_end_by_symbol
 ```
 
 The production comparison runner derives one canonical execution window per
@@ -822,6 +824,9 @@ passes only when M0 and M2 use the same frozen input identity, symbol, market
 contract, canonical window, and shared daily Open-to-Open accounting, while
 their documented daily and monthly construction rules are the only difference.
 The runner does not infer this gate from which strategy performs better.
+The production gate also validates the required metric contract separately for
+every primary symbol, and requires non-null finite
+`signal_direction_agreement` in `[0, 1]`.
 
 ## 7.8 Metric definitions
 

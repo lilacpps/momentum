@@ -51,6 +51,28 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "research_track_b.yaml"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "processed"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "results" / "m2"
 ACCOUNTING_ENGINE = "shared_daily_open_to_open_v1"
+REQUIRED_METRICS = (
+    "gross_return",
+    "max_drawdown",
+    "turnover",
+    "trade_count",
+    "average_holding",
+    "average_holding_intervals",
+    "average_holding_calendar_days",
+    "reversal_count",
+    "reversal_frequency",
+    "carry_in_episode_count",
+    "carry_in_position",
+    "carry_out_episode_count",
+    "carry_out_position",
+    "return_count",
+)
+UNDEFINED_METRICS = frozenset({
+    "average_holding",
+    "average_holding_intervals",
+    "average_holding_calendar_days",
+    "reversal_frequency",
+})
 
 
 class M2ExecutionSafetyError(RuntimeError):
@@ -76,6 +98,7 @@ class SymbolComparison:
     m0_metrics: dict[str, Any]
     m2_metrics: dict[str, Any]
     signal_direction_agreement: float | None
+    required_metrics: dict[str, Any]
     gate7: dict[str, Any]
 
 
@@ -360,6 +383,7 @@ def _comparison_row(item: SymbolComparison, config: TrackBConfig, summary: Struc
         "last_evaluation_return_timestamp": item.window.last_evaluation_return_timestamp,
         "return_count": item.window.return_count,
         "signal_direction_agreement": item.signal_direction_agreement,
+        "required_metrics_pass": item.required_metrics["passed"],
         "gate7_construction_invariant_pass": item.gate7["construction_invariant_pass"],
     }
     metric_names = (
@@ -377,6 +401,53 @@ def _comparison_row(item: SymbolComparison, config: TrackBConfig, summary: Struc
         else:
             row[f"delta_{name}"] = None
     return row
+
+
+def _required_metrics_status(
+    m0_metrics: Mapping[str, Any],
+    m2_metrics: Mapping[str, Any],
+) -> dict[str, Any]:
+    missing: list[str] = []
+    invalid: list[str] = []
+    for label, metrics in (("m0", m0_metrics), ("m2", m2_metrics)):
+        for name in REQUIRED_METRICS:
+            if name not in metrics:
+                missing.append(f"{label}.{name}")
+                continue
+            value = metrics[name]
+            if value is None and name in UNDEFINED_METRICS:
+                continue
+            if value is None:
+                invalid.append(f"{label}.{name}: null")
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                invalid.append(f"{label}.{name}: non-numeric")
+                continue
+            if not math.isfinite(numeric):
+                invalid.append(f"{label}.{name}: non-finite")
+                continue
+            if name in {"trade_count", "reversal_count", "carry_in_episode_count", "carry_out_episode_count", "return_count"} and numeric < 0:
+                invalid.append(f"{label}.{name}: negative")
+            if name == "turnover" and numeric < 0:
+                invalid.append(f"{label}.{name}: negative")
+    agreement = m2_metrics.get("signal_direction_agreement")
+    if agreement is None:
+        invalid.append("m2.signal_direction_agreement: null")
+    else:
+        try:
+            agreement_value = float(agreement)
+        except (TypeError, ValueError):
+            invalid.append("m2.signal_direction_agreement: non-numeric")
+        else:
+            if not math.isfinite(agreement_value) or not 0.0 <= agreement_value <= 1.0:
+                invalid.append("m2.signal_direction_agreement: outside [0, 1]")
+    return {
+        "passed": not missing and not invalid,
+        "missing": missing,
+        "invalid": invalid,
+    }
 
 
 def _run_symbol(
@@ -425,6 +496,8 @@ def _run_symbol(
         sample_start=window.sample_start,
         sample_end=window.sample_end,
     )
+    signal_direction_agreement = m2.metrics.get("signal_direction_agreement")
+    m2_metrics["signal_direction_agreement"] = signal_direction_agreement
     m2 = m2.__class__(bars=m2.bars, ledger=m2.ledger, metrics=m2_metrics, metadata=m2.metadata)
     m0 = m0.__class__(bars=m0.bars, ledger=m0.ledger, metrics=m0_metrics, metadata=m0.metadata)
     _check_metadata_identity(m2.metadata, config, summary, symbol, window)
@@ -437,6 +510,11 @@ def _run_symbol(
     _check_shared_window(m0, m2, window, expected_return_keys)
     if m0_metrics["return_count"] != m2_metrics["return_count"]:
         raise M2ExecutionSafetyError(f"M0/M2 return_count mismatch for {symbol}")
+    required_metrics = _required_metrics_status(m0_metrics, m2_metrics)
+    if not required_metrics["passed"]:
+        raise M2ExecutionSafetyError(
+            f"required metrics failed for {symbol}: {required_metrics}"
+        )
     gate7 = _gate7_invariant(m0, m2, config, summary, window)
     if not gate7["construction_invariant_pass"]:
         raise M2ExecutionSafetyError(f"Gate M2 #7 failed for {symbol}: {gate7}")
@@ -447,20 +525,24 @@ def _run_symbol(
         m2=m2,
         m0_metrics=m0_metrics,
         m2_metrics=m2_metrics,
-        signal_direction_agreement=m2_metrics.get("signal_direction_agreement"),
+        signal_direction_agreement=signal_direction_agreement,
+        required_metrics=required_metrics,
         gate7=gate7,
     )
 
 
 def _gate_summary(items: list[SymbolComparison], config: TrackBConfig) -> dict[str, Any]:
     complete = len(items) == len(config.primary_symbols)
+    required_metrics_by_symbol = {
+        item.symbol: item.required_metrics["passed"] for item in items
+    }
     checks = {
         "monthly_timing_and_terminal_boundary_verified": complete,
         "warmup_causal_state_continuity_verified": complete,
         "common_evaluation_window_verified": complete,
         "final_holdout_sealed": complete,
         "frozen_primary_symbols_independently_executed": complete,
-        "required_metrics_reported": complete,
+        "required_metrics_reported": complete and all(required_metrics_by_symbol.values()),
         "construction_rules_only_invariant": complete and all(
             item.gate7["construction_invariant_pass"] for item in items
         ),
@@ -470,6 +552,7 @@ def _gate_summary(items: list[SymbolComparison], config: TrackBConfig) -> dict[s
         "checks": checks,
         "primary_symbol_count": len(items),
         "required_primary_symbol_count": len(config.primary_symbols),
+        "required_metrics_by_symbol": required_metrics_by_symbol,
         "performance_not_used_for_gate_7": True,
     }
 
@@ -548,6 +631,7 @@ def _save_outputs(
             _write_csv(symbol_root / "m0_ledger.csv", item.m0.ledger)
             _write_csv(symbol_root / "m2_ledger.csv", item.m2.ledger)
             _write_json(symbol_root / "window.json", asdict(item.window))
+            _write_json(symbol_root / "required_metrics.json", item.required_metrics)
             _write_json(symbol_root / "gate_m2_7.json", item.gate7)
         staging.rename(output_directory)
     except Exception:
@@ -604,6 +688,12 @@ def main(
             "symbols": list(config.primary_symbols),
             "development_period": f"{config.development.start}..{config.development.end}",
             "validation_period": f"{config.validation.start}..{config.validation.end}",
+            "sample_start_by_symbol": {
+                item.symbol: item.window.sample_start.isoformat() for item in items
+            },
+            "sample_end_by_symbol": {
+                item.symbol: item.window.sample_end.isoformat() for item in items
+            },
             "result_level": "gross_price_only",
             "academic_mop_replication": False,
             "final_holdout_included": False,
