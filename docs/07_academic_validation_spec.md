@@ -19,6 +19,16 @@ Diagnostics retain aggregate counts for backward compatibility and additionally
 report `diagnostics_by_universe_role` with observation, positive, negative, and
 zero counts for primary and secondary robustness samples.
 
+Structural validation is bound to the executed Daily dataset by
+`dataset_fingerprint_algorithm = track-b-daily-sha256-v1`. The fingerprint
+covers only `symbol`, `timestamp`, `open`, `high`, `low`, and `close`; rows are
+canonicalized by symbol and UTC timestamp ordering before deterministic SHA-256
+serialization. `run_m1a_track_b` rejects any fingerprint, algorithm, or
+freeze-version mismatch before producing an M1A result.
+Its structural-validation input is a `StructuralValidationSummary` containing
+`freeze_version`, `structural_spec_version`, `dataset_fingerprint`,
+`dataset_fingerprint_algorithm`, and `status_by_symbol`.
+
 For real Track B input, `timestamp` must be timezone-aware UTC and must represent
 the nominal `America/New_York` 17:00 session close. A timezone-naive timestamp is
 accepted only by the private synthetic fixture path. Calendar month identity is

@@ -14,6 +14,7 @@ from momentum.data.track_b import (
     _build_synthetic_monthly_observations,
     _build_track_b_monthly_observations,
 )
+from momentum.research.track_b_config import StructuralValidationSummary
 from momentum.research.inference import (
     CONFIDENCE_LEVEL,
     HAC_LAG,
@@ -525,6 +526,13 @@ def _run_m1a_analysis(
         "data_origin": data_origin,
         "final_holdout_included": False,
     }
+    for key in (
+        "structural_spec_version",
+        "dataset_fingerprint",
+        "dataset_fingerprint_algorithm",
+    ):
+        if key in monthly_result.diagnostics:
+            metadata[key] = monthly_result.diagnostics[key]
     return M1AResult(
         observations=analysis_observations.reset_index(drop=True),
         sign_conditioned_results=pd.DataFrame(sign_rows),
@@ -537,8 +545,7 @@ def _run_m1a_analysis(
 def run_m1a_track_b(
     daily: pd.DataFrame,
     config: TrackBConfig,
-    structural_status_by_symbol: dict[str, str],
-    validation_freeze_version: int,
+    validation_summary: StructuralValidationSummary,
     *,
     include_sensitivity: bool = True,
 ) -> M1AResult:
@@ -546,8 +553,7 @@ def run_m1a_track_b(
     monthly_result = _build_track_b_monthly_observations(
         daily,
         config,
-        structural_status_by_symbol,
-        validation_freeze_version,
+        validation_summary,
     )
     return _run_m1a_analysis(
         monthly_result,

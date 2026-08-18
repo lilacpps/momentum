@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
+import struct
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from momentum.research.track_b_config import TrackBConfig
+from momentum.research.track_b_config import SUPPORTED_DATASET_FINGERPRINT_ALGORITHM
+from momentum.research.track_b_config import StructuralValidationSummary
 from momentum.research.track_b_config import validate_m1a_real_data_gate
 
 REQUIRED_LONG_DAILY_COLUMNS = ("symbol", "timestamp", "open", "high", "low", "close")
@@ -23,6 +27,51 @@ class TrackBDailyValidationError(ValueError):
 class MonthlyObservationResult:
     observations: pd.DataFrame
     diagnostics: dict[str, Any]
+
+
+def compute_track_b_daily_fingerprint(data: pd.DataFrame) -> str:
+    """Return the v1 SHA-256 identity of canonical Track B daily OHLC rows."""
+    missing = [column for column in REQUIRED_LONG_DAILY_COLUMNS if column not in data.columns]
+    if missing:
+        raise TrackBDailyValidationError(f"missing required columns: {missing}")
+    frame = data.loc[:, REQUIRED_LONG_DAILY_COLUMNS].copy()
+    if frame["symbol"].isna().any():
+        raise TrackBDailyValidationError("symbol must be non-empty")
+    if not isinstance(frame["timestamp"].dtype, pd.DatetimeTZDtype):
+        raise TrackBDailyValidationError("fingerprint requires timezone-aware UTC timestamps")
+    if str(frame["timestamp"].dt.tz) != "UTC":
+        raise TrackBDailyValidationError("fingerprint requires UTC timestamps")
+    symbols = frame["symbol"].astype(str)
+    timestamps = frame["timestamp"].dt.tz_convert("UTC").astype("int64")
+    numeric_columns = ("open", "high", "low", "close")
+    for column in numeric_columns:
+        if not pd.api.types.is_numeric_dtype(frame[column]):
+            raise TrackBDailyValidationError(f"{column} must be numeric")
+        values = frame[column].to_numpy(dtype="float64", na_value=float("nan"))
+        if not np.isfinite(values).all():
+            raise TrackBDailyValidationError(f"{column} contains non-finite values")
+    canonical = pd.DataFrame({
+        "symbol": symbols,
+        "timestamp_ns": timestamps,
+        **{column: frame[column].astype("float64") for column in numeric_columns},
+    }).sort_values(["symbol", "timestamp_ns"], kind="mergesort")
+    digest = hashlib.sha256()
+    digest.update(SUPPORTED_DATASET_FINGERPRINT_ALGORITHM.encode("ascii"))
+    digest.update(b"\0")
+    digest.update(struct.pack("<Q", len(canonical)))
+    for symbol, timestamp_ns, open_, high, low, close in canonical.itertuples(index=False, name=None):
+        encoded_symbol = str(symbol).encode("utf-8")
+        digest.update(struct.pack("<Q", len(encoded_symbol)))
+        digest.update(encoded_symbol)
+        digest.update(struct.pack(
+            "<qdddd",
+            int(timestamp_ns),
+            float(open_),
+            float(high),
+            float(low),
+            float(close),
+        ))
+    return digest.hexdigest()
 
 
 def validate_track_b_daily(
@@ -150,9 +199,18 @@ def _build_monthly_observations(
                 "formation": formation_month,
                 "next_1m": formation_month + 1,
             }
+            if required["past_12m"] < requested_start:
+                excluded_by_reason["pre_sample_history_unavailable"] = (
+                    excluded_by_reason.get("pre_sample_history_unavailable", 0) + 1
+                )
+                continue
             missing = [name for name, month in required.items() if month not in lookup]
             if missing:
-                reason = "missing_" + "_and_".join(missing)
+                reason = {
+                    "formation": "missing_formation_month",
+                    "next_1m": "missing_next_month",
+                    "past_12m": "missing_past_12m_month",
+                }[missing[0]]
                 excluded_by_reason[reason] = excluded_by_reason.get(reason, 0) + 1
                 continue
             past_return = float(lookup[required["formation"]] / lookup[required["past_12m"]] - 1.0)
@@ -221,14 +279,31 @@ def _build_synthetic_monthly_observations(
 def _build_track_b_monthly_observations(
     data: pd.DataFrame,
     config: TrackBConfig,
-    structural_status_by_symbol: dict[str, str],
-    validation_freeze_version: int,
+    validation_summary: StructuralValidationSummary,
 ) -> MonthlyObservationResult:
     """Gate, filter, and build only non-holdout Track B observations."""
+    if validation_summary.freeze_version != config.freeze_version:
+        raise TrackBDailyValidationError(
+            "structural validation freeze_version does not match current artifact"
+        )
+    if validation_summary.dataset_fingerprint_algorithm != SUPPORTED_DATASET_FINGERPRINT_ALGORITHM:
+        raise TrackBDailyValidationError(
+            "unsupported structural validation dataset fingerprint algorithm"
+        )
+    if not validation_summary.structural_spec_version:
+        raise TrackBDailyValidationError("structural_spec_version must be non-empty")
+    try:
+        dataset_fingerprint = compute_track_b_daily_fingerprint(data)
+    except TrackBDailyValidationError:
+        raise
+    if dataset_fingerprint != validation_summary.dataset_fingerprint:
+        raise TrackBDailyValidationError(
+            "structural validation dataset fingerprint does not match input"
+        )
     eligible_secondary = validate_m1a_real_data_gate(
         config,
-        structural_status_by_symbol,
-        validation_freeze_version,
+        validation_summary.status_by_symbol,
+        validation_summary.freeze_version,
     )
     eligible_symbols = set(config.primary_symbols) | set(eligible_secondary)
     if "symbol" not in data.columns:
@@ -243,9 +318,15 @@ def _build_track_b_monthly_observations(
         raise TrackBDailyValidationError(
             f"eligible secondary symbols missing from input: {missing_eligible_secondary}"
         )
-    return _build_monthly_observations(
+    result = _build_monthly_observations(
         selected,
         config,
         max_outcome_month=config.validation.end,
         allow_naive_timestamp=False,
     )
+    result.diagnostics.update({
+        "structural_spec_version": validation_summary.structural_spec_version,
+        "dataset_fingerprint": validation_summary.dataset_fingerprint,
+        "dataset_fingerprint_algorithm": validation_summary.dataset_fingerprint_algorithm,
+    })
+    return result

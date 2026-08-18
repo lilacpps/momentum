@@ -10,12 +10,19 @@ import yaml
 from momentum.data.track_b import (
     TrackBDailyValidationError,
     _build_synthetic_monthly_observations,
+    compute_track_b_daily_fingerprint,
     validate_track_b_daily,
 )
 from momentum.research.inference import moving_block_bootstrap, outcome_months_are_consecutive
 from momentum.research.m1a import _run_m1a_synthetic
 from momentum.research import run_m1a_track_b
-from momentum.research.track_b_config import TrackBConfigError, load_track_b_config, validate_m1a_real_data_gate
+from momentum.research.track_b_config import (
+    SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
+    StructuralValidationSummary,
+    TrackBConfigError,
+    load_track_b_config,
+    validate_m1a_real_data_gate,
+)
 
 
 ROOT = Path(__file__).parents[2]
@@ -52,6 +59,28 @@ def _varying_daily_fixture() -> pd.DataFrame:
     data["high"] = close + 0.2
     data["low"] = close - 0.2
     return data
+
+
+def _validation_summary(
+    config,
+    daily: pd.DataFrame,
+    *,
+    status_by_symbol: dict[str, str] | None = None,
+    freeze_version: int | None = None,
+    algorithm: str = SUPPORTED_DATASET_FINGERPRINT_ALGORITHM,
+) -> StructuralValidationSummary:
+    if status_by_symbol is None:
+        status_by_symbol = {
+            **{symbol: "pass" for symbol in config.primary_symbols},
+            **{symbol: "fail" for symbol in config.secondary_symbols},
+        }
+    return StructuralValidationSummary(
+        freeze_version=config.freeze_version if freeze_version is None else freeze_version,
+        structural_spec_version="track-b-structural-v1",
+        dataset_fingerprint=compute_track_b_daily_fingerprint(daily),
+        dataset_fingerprint_algorithm=algorithm,
+        status_by_symbol=status_by_symbol,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -169,6 +198,8 @@ def test_missing_calendar_month_is_excluded_without_fill(track_b_config):
     ]) == 0
     assert "2019-06" in built.diagnostics["missing_calendar_months"]["XAUUSD"]
     assert built.diagnostics["excluded_observation_count"] > 0
+    assert built.diagnostics["excluded_observations_by_reason"]["pre_sample_history_unavailable"] == 24
+    assert built.diagnostics["excluded_observations_by_reason"]["missing_formation_month"] > 0
 
 
 def test_outcome_month_split_and_final_holdout_is_not_returned_by_analysis(track_b_config):
@@ -329,11 +360,11 @@ def test_secondary_robustness_does_not_change_primary_pool(track_b_config):
         track_b_config.secondary_symbols[0]: "pass",
     }
     without_secondary = run_m1a_track_b(
-        data, track_b_config, failed_secondary, track_b_config.freeze_version,
+        data, track_b_config, _validation_summary(track_b_config, data, status_by_symbol=failed_secondary),
         include_sensitivity=False,
     )
     with_secondary = run_m1a_track_b(
-        data, track_b_config, eligible_secondary, track_b_config.freeze_version,
+        data, track_b_config, _validation_summary(track_b_config, data, status_by_symbol=eligible_secondary),
         include_sensitivity=False,
     )
     selector = (
@@ -375,8 +406,7 @@ def test_eligible_secondary_missing_from_input_fails_fast(track_b_config):
         run_m1a_track_b(
             data,
             track_b_config,
-            statuses,
-            track_b_config.freeze_version,
+            _validation_summary(track_b_config, data, status_by_symbol=statuses),
             include_sensitivity=False,
         )
 
@@ -444,8 +474,7 @@ def test_track_b_runner_gates_and_excludes_holdout_and_failed_secondary(track_b_
     result = run_m1a_track_b(
         data,
         track_b_config,
-        statuses,
-        track_b_config.freeze_version,
+        _validation_summary(track_b_config, data, status_by_symbol=statuses),
         include_sensitivity=False,
     )
     assert "final_holdout" not in set(result.observations["split"])
@@ -455,8 +484,62 @@ def test_track_b_runner_gates_and_excludes_holdout_and_failed_secondary(track_b_
         run_m1a_track_b(
             data,
             track_b_config,
-            {**statuses, track_b_config.primary_symbols[0]: "fail"},
-            track_b_config.freeze_version,
+            _validation_summary(
+                track_b_config,
+                data,
+                status_by_symbol={**statuses, track_b_config.primary_symbols[0]: "fail"},
+            ),
+            include_sensitivity=False,
+        )
+
+
+def test_track_b_summary_binds_daily_fingerprint_and_freeze(track_b_config):
+    data = _daily_fixture(start="2015-01", end="2024-01", symbols=track_b_config.primary_symbols)
+    statuses = {symbol: "pass" for symbol in track_b_config.primary_symbols}
+    summary = _validation_summary(track_b_config, data, status_by_symbol=statuses)
+    result = run_m1a_track_b(data, track_b_config, summary, include_sensitivity=False)
+    assert result.metadata["freeze_version"] == track_b_config.freeze_version
+    assert result.metadata["dataset_fingerprint"] == summary.dataset_fingerprint
+    assert result.metadata["dataset_fingerprint_algorithm"] == SUPPORTED_DATASET_FINGERPRINT_ALGORITHM
+
+    mutated_close = data.copy()
+    mutated_close.loc[0, "close"] += 0.01
+    with pytest.raises(TrackBDailyValidationError, match="fingerprint"):
+        run_m1a_track_b(mutated_close, track_b_config, summary, include_sensitivity=False)
+
+    mutated_timestamp = data.copy()
+    mutated_timestamp.loc[0, "timestamp"] += pd.Timedelta(minutes=1)
+    with pytest.raises(TrackBDailyValidationError, match="fingerprint"):
+        run_m1a_track_b(mutated_timestamp, track_b_config, summary, include_sensitivity=False)
+
+    with pytest.raises(TrackBDailyValidationError, match="fingerprint"):
+        run_m1a_track_b(data.iloc[:-1].copy(), track_b_config, summary, include_sensitivity=False)
+    with pytest.raises(TrackBDailyValidationError, match="fingerprint"):
+        run_m1a_track_b(
+            pd.concat([data, data.iloc[[0]]], ignore_index=True),
+            track_b_config,
+            summary,
+            include_sensitivity=False,
+        )
+
+    with pytest.raises(TrackBDailyValidationError, match="freeze_version"):
+        run_m1a_track_b(
+            data,
+            track_b_config,
+            _validation_summary(
+                track_b_config, data, status_by_symbol=statuses,
+                freeze_version=track_b_config.freeze_version + 1,
+            ),
+            include_sensitivity=False,
+        )
+    with pytest.raises(TrackBDailyValidationError, match="unsupported.*algorithm"):
+        run_m1a_track_b(
+            data,
+            track_b_config,
+            _validation_summary(
+                track_b_config, data, status_by_symbol=statuses,
+                algorithm="unsupported-v0",
+            ),
             include_sensitivity=False,
         )
 
