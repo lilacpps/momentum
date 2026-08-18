@@ -114,6 +114,11 @@ predictor formation monthではなく、next-month returnのoutcome monthで決�
 monthが`2023-12`、next-1m outcome monthが`2024-01`なら、そのobservationはFinal Holdoutに所属します。
 split境界をまたぐfuture returnを直前splitへ混入させません。
 
+M2では同じcalendar monthをposition/PnLの用語で`holding_month`と呼び、split assignmentも
+`holding_month`で行います。すなわちM2の`formation_month = M`、`holding_month = M+1`であり、
+M1Aのoutcome-month assignmentと境界は同じです。current v3 artifactの機械可読なbasis名はM1Aとの
+互換性のため維持し、M2のnormative名称だけを`holding_month`として固定します。
+
 `warmup_data_start`の`2015-09`はDevelopment開始ではありません。これはDevelopment開始時点から
 past-12-month return等のcausal predictorを作成し、必要なstateを初期化するためのpre-sample historyです。
 warmup observationsはDevelopment / Validation / Final Holdoutの評価sampleに含めず、predictor formation
@@ -155,6 +160,11 @@ Track B structural validationのoverall gateは、primaryとsecondaryを分け�
 
 `fail`を理由にuniverseを変更する場合は、既存freeze versionをin-place変更せず、新しいfreeze versionを作成して
 再validationします。各analysis output / metadataには、使用したinteger `freeze_version`を必ず記録します。
+
+Current status: freeze v3のprimary 8 symbolおよびsecondary 4 symbolはすべて
+`pass`であり、同一のprepared Daily datasetに対するM1A real historical executionは完了しています。
+実行結果はFinal Holdoutを含まず、`freeze_version`、`structural_spec_version`、
+`dataset_fingerprint`、`dataset_fingerprint_algorithm`をmetadataへ保存しています。
 
 ## Track B v2 structural validation contract (current)
 
@@ -220,7 +230,8 @@ malformed inputを`pass_with_warning`へ昇格させない。current v2 freeze�
 passするまで、M1A real historical executionを開始しない。secondary failureは従来どおりprimaryを
 blockしない。
 
-real prepared OHLCのfull validationとM1A real historical executionは、別途明示的に開始するまで行わない。
+Current freeze v3では、上記の明示的な実行が完了しています。Final Holdoutのpredictive / performance
+結果は引き続きM7まで開きません。
 
 ## Historical v1 note
 
@@ -232,7 +243,7 @@ current v2のloader、validator、fingerprint入力、M1A authorityとして参�
 
 M1はworkstream別にstatusを持つ。
 
-- M1A implementation: `Ready after valid current Track B freeze artifact`; M1A real-data execution: `Ready after structural validation pass or pass_with_warning`
+- M1A implementation: `complete`; M1A real-data execution: `complete` for current freeze v3 after structural validation pass
 - AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`

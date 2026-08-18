@@ -47,10 +47,26 @@ def _event(old: int, new: int) -> str:
     return "hold"
 
 
-def run_m0_backtest(data: pd.DataFrame, metadata: dict[str, Any] | None = None) -> BacktestResult:
-    """Run the deterministic single-symbol M0 engine on validated OHLC data."""
+def run_target_backtest(
+    data: pd.DataFrame,
+    target_position: pd.Series,
+    signal: pd.Series | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> BacktestResult:
+    """Run shared daily Open-to-Open execution from a target-position series."""
     frame = validate_ohlc(data)
-    signal, target = generate_m0_signals(frame["close"])
+    target = pd.Series(target_position).reset_index(drop=True)
+    if len(target) != len(frame):
+        raise ValueError("target_position must have one value per OHLC row")
+    if target.isna().any() or not target.isin([-1, 0, 1]).all():
+        raise ValueError("target_position must contain only -1, 0, or 1")
+    target = target.astype("int8")
+    if signal is None:
+        signal_series = pd.Series(np.nan, index=frame.index, dtype="float64")
+    else:
+        signal_series = pd.Series(signal).reset_index(drop=True)
+        if len(signal_series) != len(frame):
+            raise ValueError("signal must have one value per OHLC row")
     n = len(frame)
     position = 0
     ledger_rows: list[dict[str, Any]] = []
@@ -101,7 +117,7 @@ def run_m0_backtest(data: pd.DataFrame, metadata: dict[str, Any] | None = None) 
 
         bar_rows.append({
             "timestamp": frame.at[t, "timestamp"],
-            "signal": signal.iloc[t],
+            "signal": signal_series.iloc[t],
             "target_position": target_position,
             "executed_position": position,
             "execution_event": execution_event,
@@ -128,7 +144,15 @@ def run_m0_backtest(data: pd.DataFrame, metadata: dict[str, Any] | None = None) 
         "exit_timestamp", "exit_price", "status", "reversal_from_episode_id",
     ])
     result_metadata = dict(metadata or {})
+    return BacktestResult(bars=bars, ledger=ledger, metrics=gross_metrics(ledger, bars), metadata=result_metadata)
+
+
+def run_m0_backtest(data: pd.DataFrame, metadata: dict[str, Any] | None = None) -> BacktestResult:
+    """Run the deterministic single-symbol M0 engine on validated OHLC data."""
+    frame = validate_ohlc(data)
+    signal, target = generate_m0_signals(frame["close"])
+    result_metadata = dict(metadata or {})
     # M0 identity and accounting level are reserved: callers may add context,
     # but cannot relabel a result as another research specification.
     result_metadata.update(METADATA)
-    return BacktestResult(bars=bars, ledger=ledger, metrics=gross_metrics(ledger, bars), metadata=result_metadata)
+    return run_target_backtest(frame, target, signal, result_metadata)

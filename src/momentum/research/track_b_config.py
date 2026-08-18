@@ -73,13 +73,17 @@ class TrackBConfig:
         return ("development", "validation")
 
     def split_for_outcome(self, outcome_month: pd.Period) -> str:
-        if self.development.contains(outcome_month):
+        return self.split_for_holding_month(outcome_month)
+
+    def split_for_holding_month(self, holding_month: pd.Period) -> str:
+        """Assign the split by the month whose first Open owns the return."""
+        if self.development.contains(holding_month):
             return "development"
-        if self.validation.contains(outcome_month):
+        if self.validation.contains(holding_month):
             return "validation"
-        if self.final_holdout.contains(outcome_month):
+        if self.final_holdout.contains(holding_month):
             return "final_holdout"
-        if outcome_month < self.development.start:
+        if holding_month < self.development.start:
             return "warmup"
         return "outside_frozen_period"
 
@@ -137,6 +141,8 @@ def load_track_b_config(path: str | Path = "config/research_track_b.yaml") -> Tr
     basis = split.get("basis")
     if basis != "next_1m_return_outcome_month":
         raise TrackBConfigError("split_assignment.basis must be next_1m_return_outcome_month")
+    if split.get("m2_basis", "holding_month") != "holding_month":
+        raise TrackBConfigError("split_assignment.m2_basis must be holding_month")
     universe = _mapping(raw["symbol_universe"], "symbol_universe")
     primary = tuple(universe.get("primary", ()))
     secondary = tuple(universe.get("secondary_cross_robustness", ()))

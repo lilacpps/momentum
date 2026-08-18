@@ -2,7 +2,14 @@
 
 ## Status
 M1A implementation: `complete`.
-M1A real-data execution: `pending structural validation`.
+M1A real-data execution: `complete`.
+Current freeze v3 real-data execution completed after structural validation: all
+8 primary and 4 secondary symbols were `pass`, with the same
+`dataset_fingerprint` and `structural_spec_version = track-b-structural-v2`.
+Final Holdout observations were not included. The local execution outputs are
+under `results/m1a/freeze_v3_*` (the directory is intentionally ignored by
+git); the saved metadata and structural-validation summary are the execution
+receipt for this status.
 AQR Reference Sanity: `ready independently of eligible MOP underlying data`.
 M1B: `data_unavailable_pending` until eligible reference underlying data is identified.
 M1C-Huang-reference: `data_unavailable_pending` until the Huang contract is frozen and eligible reference underlying data is identified.

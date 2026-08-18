@@ -102,6 +102,7 @@ def test_config_loader_validates_current_frozen_artifact(track_b_config):
         "This change is made before viewing Track B predictive or performance results."
     )
     assert track_b_config.split_assignment_basis == "next_1m_return_outcome_month"
+    assert track_b_config.raw["split_assignment"]["m2_basis"] == "holding_month"
     assert track_b_config.boundary_timezone == "UTC"
     assert "price_type" in track_b_config.raw
 
@@ -559,7 +560,7 @@ def test_gate_primary_failure_blocks_but_secondary_failure_does_not(track_b_conf
 def test_public_surface_only_exposes_track_b_runner(track_b_config):
     import momentum.research as research
 
-    assert research.__all__ == ["run_m1a_track_b"]
+    assert research.__all__ == ["run_m1a_track_b", "run_m2_track_b"]
     assert callable(run_m1a_track_b)
     assert not hasattr(research, "run_m1a_synthetic")
     assert not hasattr(research, "build_monthly_observations")

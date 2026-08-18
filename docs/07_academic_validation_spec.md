@@ -120,7 +120,7 @@ M1C pending`を正式な状態として扱い、M1全体を単一booleanに集�
 
 | Workstream | 内容 | Status |
 |---|---|---|
-| M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Ready after valid Track B concrete freeze artifact |
+| M1A Practical Predictability | past 12m spot/CFD return -> next 1m return | Complete for current freeze v3 after structural validation and real-data execution |
 | AQR Reference Sanity | workbook inventory and factor-series sanity | Ready independently of eligible MOP underlying data |
 | M1B MOP Regression Comparator | eligible futures / forward / excess-return underlying series | Ready only after eligible reference underlying data is identified |
 | M1C-Huang-reference | Huang methodology contract + eligible MOP-like reference underlying series | Ready after methodology freeze and eligible reference underlying data |
@@ -689,37 +689,54 @@ calendar month `M` の最後のvalid Daily Closeが確定した後にsignalを�
 
 ```text
 signal[M] = sign(month_end_close[M] / month_end_close[M-12] - 1)
+formation_month = M
+holding_month = M+1
 ```
 
-これは12 completed calendar monthsのformationです。
-M0の240 observed daily intervalsとは別仕様です。
+これは12 completed calendar monthsのformationです。M0の240 observed daily intervalsとは別仕様です。
 
-## 7.2 Execution
+## 7.2 Execution and split assignment
 
-Month Mのsignalは、**Month M+1 の最初のavailable Daily Open** でexecutionします。
+Month Mのsignalは、**holding month M+1の最初のavailable Daily Open**でexecutionします。
+M2のsplit assignmentは`holding_month`です。既存のM1Aでいう`next_1m_return`のoutcome monthと
+同じcalendar monthですが、M2ではposition/PnLの所属を明示するため`holding_month`という名前を使います。
 
 ```text
-last valid Close of M
+last valid Close of formation_month M
         ↓
-signal
+signal[M]
         ↓
-first available Open of M+1
+first available Open of holding_month M+1
 ```
 
 同じmonth-end Closeで約定しません。
 
-## 7.3 Holding
-
-positionは次のmonthly rebalanceまで保持。
+For the current Track B freeze, M2 may generate only these holding months before M7:
 
 ```text
-entry: first available Open of M+1
-exit/rebalance: first available Open of M+2
+Development : 2017-01 ... 2021-12
+Validation  : 2022-01 ... 2023-12
+Final Holdout: 2024-01 ... 2026-06 (sealed until M7)
 ```
 
-monthly first-open-to-next-month-first-openで測定します。
+The first Open of `2024-01` may be used only as the exit boundary for the
+`2023-12` Validation holding interval. No `holding_month = 2024-01`
+position or return may be generated before M7.
 
-## 7.4 State
+## 7.3 Holding
+
+positionは次のmonthly rebalanceまで保持します。
+
+```text
+entry: first available Open of holding_month M+1
+exit/rebalance: first available Open of holding_month M+2
+```
+
+M2は月次PnLを別engineで計算しません。M0と共有するdaily Open-to-Open accountingへtarget positionを渡し、
+holding month内のdaily strategy returnsをcompoundします。これにより、月内daily returnのcompoundは
+`first Open of M+1`から`first Open of M+2`までのmonthly gross returnと一致し、M0とdaily drawdownを比較できます。
+
+## 7.4 State and universe
 
 ```text
 positive -> Long
@@ -727,28 +744,77 @@ negative -> Short
 zero     -> Flat
 ```
 
-M2初期版はunscaled。
+M2初期版はunscaled、gross、spot/CFD price-onlyです。freeze済みprimary universeの8 symbolをそれぞれ
+独立に実行します。M2ではperformanceを見たsymbol selection、portfolio aggregation、pooled strategy
+resultを行いません。M3でmulti-symbol research、cross-symbol diagnostics、TSH plumbingを扱います。
 
 ## 7.5 Missing month
 
-formationに必要なmonth-end priceが欠ける場合、黙って補間しません。
-calendar monthそのものに観測がない異常datasetはerrorまたはexplicit exclusion。
+- pre-sampleで12か月historyが不足する場合はsignal undefined / Flatとします。
+- requested analysis range内のcalendar monthが丸ごと欠損した場合はerrorとします。
+- forward-fill、backward-fill、zero-fill、nearest-month substitutionは禁止します。
 
-## 7.6 Comparison with M0
+holiday/weekendによる個別Daily barの不在はcalendar month欠損ではありません。first available Openを使います。
 
-最低限比較:
+## 7.6 Common interval and comparison with M0
 
-- signal direction agreement
-- gross return
-- drawdown
-- turnover
-- trade count
-- average holding
-- reversal frequency
+M0とM2は必ず同じreturn intervalに揃えて比較します。M2 Development+Validationを評価する場合、
+M0側もholding month `2017-01`〜`2023-12`のdaily Open-to-Open intervalsだけから再計算します。
+M0/M2をそれぞれの全計算可能期間で比較してはいけません。
 
-M2の目的は「どちらが最適か」ではなく、daily refresh / 240-barというimplementation choiceの影響を分離することです。
+rebalanceごとのsignal-direction agreementは、M2がtargetを変更する各holding-month first Openで、
+M0が同じOpenで実行しているtargetと比較します。agreementは一致したrebalance数をcomparable
+rebalance数で割ったものとし、同じmonthly signalを全daily barへ複製して比較しません。
 
 **M2はunscaledなのでMOP representative factorのcomplete strategy reproductionとは呼びません。**
+
+## 7.7 M2 implementation convention and result metadata
+
+M2 production entry pointは、current Track B freeze artifact、matching
+`StructuralValidationSummary`、およびそのsummaryと同一のprepared Daily datasetを要求します。
+M1Aと同じfingerprint gateを使い、別dataset、別freeze version、別structural spec version、別fingerprint
+algorithmでは実行しません。各symbolはfrozen primary universeから事前に選択し、resultをpooledにしません。
+
+最低限、result metadataは次を持ちます。
+
+```text
+spec_version = m2-practical-v1
+freeze_version
+structural_spec_version
+dataset_fingerprint
+dataset_fingerprint_algorithm
+symbol
+split
+sample_period
+data_source
+price_type
+timezone
+daily_boundary
+result_level = gross_price_only
+academic_mop_replication = false
+```
+
+## 7.8 Metric definitions
+
+`gross_return`は比較対象return interval内のdaily strategy returnsをcompoundしたものです。
+`max_drawdown`は同じdaily Open-to-Open equity curveから計算し、`equity / prior_peak - 1`の最小値として
+負の値で報告します。
+
+`turnover[t] = abs(new_position[t] - old_position[t])`とし、Flat→Longは1、Long→Shortは2です。
+`trade_count`はledgerのposition episode数です。`average_holding`はclosed episodeのholding daily-return
+interval数の平均とし、calendar days平均はdiagnosticとして併記します。
+`reversal_count`はLong→ShortまたはShort→Longの回数、`reversal_frequency`は
+`reversal_count / position-change event count`です。分母が0の場合はundefinedとします。
+
+成果物にはsignal-direction agreement、turnover、trade count、average holding、gross return、
+max drawdown、reversal frequencyを含めます。
+
+## 7.9 Terminal boundary
+
+`evaluation_period_end = 2026-06`をM2で完全評価するには`2026-07`の最初のOpenが必要です。
+したがってM7前にFinal Holdoutの最後のholding monthを評価する場合は、評価期間外の終了境界データを
+`execution_boundary_data through first Open of 2026-07`として明示的に許可し、freeze metadataへ記録します。
+その境界データだけでは`holding_month = 2026-07`のposition / returnを生成しません。
 
 ---
 

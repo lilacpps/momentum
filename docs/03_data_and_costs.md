@@ -151,6 +151,10 @@ diagnostics metadataへ記録し、calendar monthとobserved rowを同一視し�
 
 M2のexecutionは `docs/07_academic_validation_spec.md` に従います。
 
+M2では`formation_month = M`、`holding_month = M+1`とし、split assignmentはholding month基準です。
+Evaluationの最終holding monthの次月first Openは終了境界価格として許可しますが、その次月を新しい
+holding position / returnのsampleには含めません。
+
 ---
 
 # 3. Academic / Reference Data Contract

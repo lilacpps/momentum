@@ -148,7 +148,7 @@ Huang bootstrapはM1C開始前にpaperからcontractをfreezeし、その後に�
 
 ### M1 workstream status
 
-- M1A implementation: `Ready after valid current Track B freeze artifact`; real-data execution requires structural validation pass
+- M1A implementation: `complete`; current freeze v3 real-data execution is complete after structural validation pass
 - AQR Reference Sanity: `Ready independently of eligible MOP underlying data`
 - M1B MOP Regression Comparator: `Ready only after eligible reference underlying data is identified`
 - M1C-Huang-reference: `Ready after Huang methodology contract freeze and eligible reference underlying data`

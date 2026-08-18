@@ -193,13 +193,14 @@ current swapの過去一律適用は原則避けます。
 
 ## Gate M1
 - M1A implementation: `docs/04_validation_policy.md`のvalid current Track B freeze artifact後
-- M1A real-data execution: `docs/04_validation_policy.md`で定義するPrimary structural-validation overall gate通過後
+- M1A real-data execution: current freeze v3ではPrimary structural-validation overall gate通過後に完了
 - AQR Reference Sanity: eligible MOP underlying dataとは独立
 - M1B MOP comparator: eligible reference underlying data identified
 - M1C-Huang-reference: Huang contract freeze + eligible reference underlying data
 - M1C-Huang-practical-analogue: Huang contract freeze + Track B data
 
-M1A completeでM2をunblockします。M1B/M1CのpendingはM2をblockしません。M1/M2のnormative
+M1Aは実装・current freeze v3のreal-data executionともにcompleteです。したがってM2はunblock済みです。
+M1B/M1CのpendingはM2をblockしません。M1/M2のnormative
 methodology、M1Aのcalendar-month/zero/missing/inference、M1B equation、Huang procedureは
 `docs/07_academic_validation_spec.md`を参照します。
 - Academic / Practical tracks separated
