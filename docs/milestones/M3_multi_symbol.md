@@ -15,7 +15,7 @@
 - `accounting_engine = shared_daily_open_to_open_v1`
 - `final_holdout_included = false`
 
-The production artifact is `results/m3/freeze_v3_20260819T080421229921Z/`.
+The production artifact is `results/m3/freeze_v3_20260819T095026212937Z/`.
 The current run executed 8 primary and 4 eligible secondary symbols. Gate M3 is
 an implementation/contract gate; performance is not used for its decision.
 There is no portfolio aggregation, and Final Holdout strategy performance is not
@@ -94,7 +94,7 @@ holding months**とする。TSMとTSHは同一holding month、同一first-Open e
 ## 成果物
 - symbol x metrics table
 - symbol x year diagnostic
-- same-config reproducibility report
+- `reproducibility.json` same-config reproducibility contract report
 - TSM/TSH-compatible monthly history table
 
 ## 必須テスト

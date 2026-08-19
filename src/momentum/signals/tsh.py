@@ -17,6 +17,29 @@ TSH_SPEC_VERSION = "tsh-huang-v1"
 class TSHSignalError(ValueError):
     """Raised when the frozen TSH monthly contract cannot be satisfied."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        symbol: str | None = None,
+        missing_months: tuple[str, ...] = (),
+        analysis_start: pd.Period | None = None,
+        analysis_end: pd.Period | None = None,
+    ) -> None:
+        self.symbol = symbol
+        self.missing_months = tuple(str(month) for month in missing_months)
+        self.analysis_start = None if analysis_start is None else str(analysis_start)
+        self.analysis_end = None if analysis_end is None else str(analysis_end)
+        super().__init__(message)
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "symbol": self.symbol,
+            "missing_calendar_months": list(self.missing_months),
+            "requested_analysis_start": self.analysis_start,
+            "requested_analysis_end": self.analysis_end,
+        }
+
 
 @dataclass(frozen=True)
 class TSHSignalResult:
@@ -59,9 +82,19 @@ def generate_tsh_signals(
     state is built from the first valid monthly return through ``analysis_end``
     so warmup positions remain continuous into the evaluation window.
     """
+    symbols = (
+        data["symbol"].dropna().astype(str).unique().tolist()
+        if "symbol" in data.columns
+        else []
+    )
+    if len(symbols) > 1:
+        raise TSHSignalError(
+            "TSH is single-symbol per run; multi-symbol input is not allowed"
+        )
+    symbol = symbols[0] if symbols else None
     frame = validate_ohlc(data)
     if frame.empty:
-        raise TSHSignalError("TSH input must not be empty")
+        raise TSHSignalError("TSH input must not be empty", symbol=symbol)
 
     start = _period(analysis_start or config.development.start)
     end = _period(analysis_end or config.validation.end)
@@ -78,7 +111,11 @@ def generate_tsh_signals(
     missing = [month for month in required if month not in month_indexes]
     if missing:
         raise TSHSignalError(
-            "missing requested calendar month(s): " + ", ".join(map(str, missing))
+            "missing requested calendar month(s): " + ", ".join(map(str, missing)),
+            symbol=symbol,
+            missing_months=tuple(str(month) for month in missing),
+            analysis_start=start,
+            analysis_end=end,
         )
 
     month_end_close = {
@@ -110,12 +147,16 @@ def generate_tsh_signals(
         if holding_month not in first_timestamp:
             if holding_month >= start:
                 raise TSHSignalError(
-                    f"missing holding month {holding_month} for TSH formation {formation_month}"
+                    f"missing holding month {holding_month} for TSH formation {formation_month}",
+                    symbol=symbol,
+                    missing_months=(str(holding_month),),
+                    analysis_start=start,
+                    analysis_end=end,
                 )
             continue
         exit_timestamp = first_timestamp.get(holding_month + 1)
         monthly_rows.append({
-            "symbol": str(data["symbol"].iloc[0]) if "symbol" in data.columns else None,
+            "symbol": symbol,
             "formation_month": formation_month,
             "month_end_close": month_end_close[formation_month],
             "monthly_return": float(monthly_return),

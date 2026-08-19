@@ -16,6 +16,7 @@ from momentum.research.track_b_config import (
     load_track_b_config,
 )
 from momentum.signals.m2 import M2SignalResult
+from momentum.signals.tsh import TSHSignalError
 
 
 ROOT = Path(__file__).parents[2]
@@ -155,3 +156,27 @@ def test_m2_mask_distinguishes_nan_zero_and_signed_signals(track_b_config):
     )
     months = m3._valid_holding_months(generated, track_b_config)
     assert months == (pd.Period("2017-02"), pd.Period("2017-03"), pd.Period("2017-04"))
+
+
+def test_tsh_missing_month_error_is_wrapped_with_track_b_identity(track_b_config):
+    daily = _daily_fixture(track_b_config)
+    summary = _summary(track_b_config, daily)
+    error = TSHSignalError(
+        "missing requested calendar month(s): 2020-06",
+        symbol="XAUUSD",
+        missing_months=("2020-06",),
+        analysis_start=pd.Period("2020-01", freq="M"),
+        analysis_end=pd.Period("2020-07", freq="M"),
+    )
+    wrapped = m3._wrap_tsh_error(
+        error,
+        symbol="XAUUSD",
+        config=track_b_config,
+        summary=summary,
+    )
+    assert wrapped.details["symbol"] == "XAUUSD"
+    assert wrapped.details["missing_calendar_months"] == ["2020-06"]
+    assert wrapped.details["requested_analysis_start"] == "2020-01"
+    assert wrapped.details["requested_analysis_end"] == "2020-07"
+    assert wrapped.details["dataset_identity"]["freeze_version"] == track_b_config.freeze_version
+    assert wrapped.details["dataset_identity"]["dataset_fingerprint"] == summary.dataset_fingerprint

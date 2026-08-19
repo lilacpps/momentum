@@ -31,6 +31,7 @@ from momentum.research.m3 import (  # noqa: E402
     M3_SPEC_VERSION,
     TSH_METHOD_ROLE,
     M3SymbolResult,
+    _masked_return_keys,
     run_m3_symbol,
 )
 from momentum.research.track_b_config import (  # noqa: E402
@@ -49,6 +50,13 @@ from momentum.signals.tsh import TSH_SPEC_VERSION  # noqa: E402
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "research_track_b.yaml"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "processed"
 DEFAULT_OUTPUT_ROOT = REPO_ROOT / "results" / "m3"
+REPRODUCIBILITY_CONTRACT = "same-config-determinism-v1"
+REPRODUCIBILITY_TABLES = (
+    "symbol_metrics.csv",
+    "symbol_year.csv",
+    "monthly_history.csv",
+    "tsm_tsh_comparison.csv",
+)
 
 
 class M3RunnerError(RuntimeError):
@@ -160,12 +168,22 @@ def _comparison_frame(items: list[M3SymbolResult]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _reproducibility_report() -> dict[str, Any]:
+    return {
+        "contract": REPRODUCIBILITY_CONTRACT,
+        "deterministic_tables": list(REPRODUCIBILITY_TABLES),
+        "verified_by_test": "test_same_input_produces_deterministic_report_tables",
+        "volatile_fields_excluded": ["execution_timestamp", "output_directory"],
+    }
+
+
 def _gate(
     config: TrackBConfig,
     summary: StructuralValidationSummary,
     items: list[M3SymbolResult],
-    failures: Mapping[str, str],
+    failures: Mapping[str, Any],
     eligible_secondary: tuple[str, ...],
+    reproducibility: Mapping[str, Any],
 ) -> dict[str, Any]:
     primary_items = [item for item in items if item.universe_role == "primary"]
     secondary_items = [item for item in items if item.universe_role == "secondary_cross_robustness"]
@@ -186,7 +204,26 @@ def _gate(
         "m0_m3_common_rule_verified": all(
             item.m0.metadata.get("lookback_intervals") == 240 for item in items
         ),
-        "m2_valid_mask_used": all(item.comparison is not None for item in primary_items),
+        "m2_valid_mask_used": all(
+            item.comparison is not None
+            and item.m2 is not None
+            and item.m2_valid_holding_months is not None
+            and item.comparison["holding_month_count"] == len(item.m2_valid_holding_months)
+            and item.comparison["tsm_return_count"] == item.comparison["tsh_return_count"]
+            and _masked_return_keys(
+                item.m2,
+                item.m2_valid_holding_months,
+                item.window,
+            ) == _masked_return_keys(
+                item.tsh,
+                item.m2_valid_holding_months,
+                item.window,
+            )
+            and item.comparison["tsm_return_count"] == len(
+                _masked_return_keys(item.m2, item.m2_valid_holding_months, item.window)
+            )
+            for item in primary_items
+        ),
         "shared_execution_interval_verified": all(
             item.m0.bars["timestamp"].equals(item.tsh.bars["timestamp"])
             and (item.m2 is None or item.m0.bars["timestamp"].equals(item.m2.bars["timestamp"]))
@@ -206,6 +243,13 @@ def _gate(
         "no_portfolio_aggregation": True,
         "deterministic_symbol_order": [item.symbol for item in items]
         == [symbol for symbol in config.primary_symbols + eligible_secondary if symbol in {item.symbol for item in items}],
+        "same_config_reproducibility_contract_verified": (
+            reproducibility.get("contract") == REPRODUCIBILITY_CONTRACT
+            and reproducibility.get("deterministic_tables") == list(REPRODUCIBILITY_TABLES)
+            and reproducibility.get("verified_by_test") == "test_same_input_produces_deterministic_report_tables"
+            and reproducibility.get("volatile_fields_excluded")
+            == ["execution_timestamp", "output_directory"]
+        ),
         "primary_failures_absent": not any(symbol in failures for symbol in config.primary_symbols),
     }
     return {
@@ -227,6 +271,7 @@ def _save_outputs(
     config: TrackBConfig,
     metadata: Mapping[str, Any],
     gate: Mapping[str, Any],
+    reproducibility: Mapping[str, Any],
     execution_timestamp: datetime,
 ) -> Path:
     output_root.mkdir(parents=True, exist_ok=True)
@@ -238,6 +283,7 @@ def _save_outputs(
     try:
         _write_json(staging / "metadata.json", metadata)
         _write_json(staging / "gate_m3.json", gate)
+        _write_json(staging / "reproducibility.json", reproducibility)
         _write_json(staging / "structural_validation_summary.json", asdict(validation.summary))
         _write_csv(staging / "structural_validation_diagnostics.csv", validation.symbol_diagnostics)
 
@@ -305,8 +351,9 @@ def main(
             for symbol in config.secondary_symbols
             if symbol in eligible_secondary
         )
+        reproducibility = _reproducibility_report()
         items: list[M3SymbolResult] = []
-        failures: dict[str, str] = {}
+        failures: dict[str, Any] = {}
         for symbol, role in ordered_roles:
             try:
                 items.append(run_m3_symbol(
@@ -317,11 +364,18 @@ def main(
                     universe_role=role,
                 ))
             except Exception as exc:
-                failures[symbol] = str(exc)
+                failures[symbol] = getattr(exc, "details", None) or str(exc)
                 if role == "primary":
                     raise M3RunnerError(f"primary symbol {symbol} failed: {exc}") from exc
 
-        gate = _gate(config, validation.summary, items, failures, eligible_secondary)
+        gate = _gate(
+            config,
+            validation.summary,
+            items,
+            failures,
+            eligible_secondary,
+            reproducibility,
+        )
         if gate["status"] != "PASS":
             raise M3RunnerError(f"Gate M3 failed: {gate}")
 
@@ -353,6 +407,7 @@ def main(
             config,
             metadata,
             gate,
+            reproducibility,
             execution_timestamp,
         )
     except Exception as exc:

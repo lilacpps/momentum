@@ -18,7 +18,12 @@ from momentum.research.track_b_config import (
     StructuralValidationSummary,
 )
 from momentum.signals.m2 import M2SignalResult, generate_m2_signals
-from momentum.signals.tsh import TSHSignalResult, TSH_SPEC_VERSION, generate_tsh_signals
+from momentum.signals.tsh import (
+    TSHSignalError,
+    TSHSignalResult,
+    TSH_SPEC_VERSION,
+    generate_tsh_signals,
+)
 
 
 M3_SPEC_VERSION = "m3-multi-symbol-v1"
@@ -28,6 +33,10 @@ TSH_METHOD_ROLE = "tsh_track_b_practical"
 
 class M3ExecutionError(RuntimeError):
     """Raised when one symbol cannot satisfy the M3 execution contract."""
+
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
+        self.details = details or {}
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -47,6 +56,7 @@ class M3SymbolResult:
     m2: BacktestResult | None
     tsh: BacktestResult
     m2_generated: M2SignalResult | None
+    m2_valid_holding_months: tuple[pd.Period, ...] | None
     tsh_generated: TSHSignalResult
     m0_metrics: dict[str, Any]
     m2_metrics: dict[str, Any] | None
@@ -191,6 +201,43 @@ def _assert_m2_mask_matches_result(
         raise M3ExecutionError("M2 decision-table mask does not match M2 result bars")
 
 
+def _masked_return_keys(
+    result: BacktestResult,
+    valid_months: tuple[pd.Period, ...],
+    window: M3Window,
+) -> tuple[int, ...]:
+    timestamps = pd.to_datetime(result.bars["timestamp"], utc=True)
+    months = timestamps.dt.tz_localize(None).dt.to_period("M")
+    mask = (
+        timestamps.ge(window.sample_start)
+        & timestamps.lt(window.sample_end)
+        & months.isin(valid_months)
+        & result.bars["strategy_return"].notna()
+    )
+    return tuple(_timestamp_keys(timestamps.loc[mask]))
+
+
+def _wrap_tsh_error(
+    exc: TSHSignalError,
+    *,
+    symbol: str,
+    config: TrackBConfig,
+    summary: StructuralValidationSummary,
+) -> M3ExecutionError:
+    details = exc.as_dict()
+    details["symbol"] = symbol
+    details["dataset_identity"] = {
+        "freeze_version": config.freeze_version,
+        "structural_spec_version": summary.structural_spec_version,
+        "dataset_fingerprint": summary.dataset_fingerprint,
+        "dataset_fingerprint_algorithm": summary.dataset_fingerprint_algorithm,
+    }
+    return M3ExecutionError(
+        f"TSH signal construction failed for {symbol}: {exc}",
+        details=details,
+    )
+
+
 def _masked_metrics(
     result: BacktestResult,
     valid_months: tuple[pd.Period, ...],
@@ -310,12 +357,20 @@ def run_m3_symbol(
     else:
         valid_months = ()
 
-    tsh_generated = generate_tsh_signals(
-        execution,
-        config,
-        analysis_start=config.development.start,
-        analysis_end=config.validation.end,
-    )
+    try:
+        tsh_generated = generate_tsh_signals(
+            execution,
+            config,
+            analysis_start=config.development.start,
+            analysis_end=config.validation.end,
+        )
+    except TSHSignalError as exc:
+        raise _wrap_tsh_error(
+            exc,
+            symbol=symbol,
+            config=config,
+            summary=validation_summary,
+        ) from exc
     tsh_metadata = {
         **context,
         "tsh_spec_version": TSH_SPEC_VERSION,
@@ -374,6 +429,7 @@ def run_m3_symbol(
         m2=m2,
         tsh=tsh,
         m2_generated=m2_generated,
+        m2_valid_holding_months=valid_months if m2 is not None else None,
         tsh_generated=tsh_generated,
         m0_metrics=m0_metrics,
         m2_metrics=m2_metrics,

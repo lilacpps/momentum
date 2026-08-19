@@ -75,7 +75,10 @@ def test_runner_writes_separated_primary_secondary_outputs(tmp_path, monkeypatch
     run_dir = next(output_root.iterdir())
     metadata = json.loads((run_dir / "metadata.json").read_text(encoding="utf-8"))
     gate = json.loads((run_dir / "gate_m3.json").read_text(encoding="utf-8"))
+    reproducibility = json.loads((run_dir / "reproducibility.json").read_text(encoding="utf-8"))
     assert gate["status"] == "PASS"
+    assert gate["checks"]["same_config_reproducibility_contract_verified"] is True
+    assert reproducibility["contract"] == "same-config-determinism-v1"
     assert metadata["m3_spec_version"] == "m3-multi-symbol-v1"
     assert "config" not in metadata
     assert metadata["tsh_method_role"] == "tsh_track_b_practical"

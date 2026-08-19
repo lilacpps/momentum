@@ -90,11 +90,35 @@ def test_requested_calendar_month_missing_is_fail_fast(track_b_config):
     data = _daily_monthly([100.0 + index for index in range(len(periods))])
     data = data.loc[data["timestamp"].dt.to_period("M") != pd.Period("2020-06")]
     with pytest.raises(TSHSignalError, match="2020-06"):
+        error = None
+        try:
+            generate_tsh_signals(
+                data,
+                track_b_config,
+                analysis_start="2020-01",
+                analysis_end="2020-07",
+            )
+        except TSHSignalError as exc:
+            error = exc
+            assert exc.symbol == "XAUUSD"
+            assert exc.missing_months == ("2020-06",)
+            assert exc.analysis_start == "2020-01"
+            assert exc.analysis_end == "2020-07"
+            assert exc.as_dict()["missing_calendar_months"] == ["2020-06"]
+            raise
+        assert error is not None
+
+
+def test_tsh_rejects_multi_symbol_input(track_b_config):
+    data = _daily_monthly([100.0, 101.0, 102.0], start="2016-09")
+    other = data.copy()
+    other["symbol"] = "EURUSD"
+    with pytest.raises(TSHSignalError, match="single-symbol"):
         generate_tsh_signals(
-            data,
+            pd.concat([data, other], ignore_index=True),
             track_b_config,
-            analysis_start="2020-01",
-            analysis_end="2020-07",
+            analysis_start="2016-10",
+            analysis_end="2016-11",
         )
 
 
