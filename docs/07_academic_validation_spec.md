@@ -880,8 +880,9 @@ M3/M4/M7は同じcontractを再利用し、milestoneごとに再定義しませ�
 
 以下がHuang paperから直接採用するTSHのeconomic/statistical definitionです。
 
-- asset `i`のformation month `M`までのhistorical sample mean（または同値な
-  累積simple returnの符号）をsignal sourceとする。
+- asset `i`のformation month `M`までのhistorical sample meanをsignal sourceとする。
+  これは`M`までの`monthly simple returns`の算術平均であり、観測数を`t`とすると、
+  その算術和は`historical mean × t`となる。TSHのsignalはこの算術和と同じ符号を使う。
 - historical sample meanがnon-negativeならLong、negativeならShortとする。
 - TSH returnは、formation month `M`のsignalをholding month `M+1`のasset returnへ
   適用する。
@@ -901,6 +902,8 @@ Track B dataset fingerprintは含まれません。
 - primary TSM-vs-TSH comparisonはM2 TSM-valid/formable holding-month maskで揃える。
 - matching Track B identityとして`freeze_version`、`structural_spec_version`、
   `dataset_fingerprint`、`dataset_fingerprint_algorithm`を検証する。
+- current M3のTrack B production outputは`method_role = tsh_track_b_practical`に固定する。
+  `tsh_huang_reference`はpaper/reference underlying datasetのresultに限定する。
 
 以下の8.2以降では、paper-explicit definitionを変更せず、このTrack B implementation
 conventionの具体的な月次系列、execution、comparison、metadataを定義します。
@@ -1006,7 +1009,7 @@ dataset_fingerprint_algorithm = track-b-daily-sha256-v1
 
 # TSH methodology and project execution metadata
 tsh_spec_version = tsh-huang-v1
-method_role = tsh_huang_reference | tsh_track_b_practical
+method_role = tsh_track_b_practical
 accounting_engine = shared_daily_open_to_open_v1
 final_holdout_included = false
 ```

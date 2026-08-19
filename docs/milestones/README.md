@@ -8,7 +8,7 @@
 | M0 | `M0_engine_correctness.md` | Ready |
 | M1 | `M1_academic_hypothesis.md` | M1A complete for current freeze v3; AQR sanity independent; M1B after eligible underlying; M1C-reference after reference underlying + contract; M1C-practical after Track B data + contract |
 | M2 | `M2_academic_comparator.md` | Complete for freeze v3; M1B/M1C may remain pending |
-| M3 | `M3_multi_symbol.md` | TSH contract `tsh-huang-v1` frozen; ready for implementation without portfolio aggregation |
+| M3 | `M3_multi_symbol.md` | `tsh-huang-v1` frozen / implementation ready; Track B production uses `tsh_track_b_practical` |
 | M4 | `M4_portfolio.md` | Needs final alignment rules |
 | M5 | `M5_volatility_scaling.md` | MOP reference EWMA contract in `docs/07`; practical mode remains separate |
 | M6 | `M6_cost_financing.md` | Core contract ready |

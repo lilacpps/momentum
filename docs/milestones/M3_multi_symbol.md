@@ -1,7 +1,7 @@
 # M3 — Multi-Symbol Common Rule
 
 ## Status
-High-level contract defined. Implementation may proceed after M0-M2.
+`tsh-huang-v1` frozen / implementation ready.
 
 ## 目的
 M0と同じdaily ruleを複数symbolへ独立適用し、single-symbol dependencyを確認する。
@@ -58,6 +58,9 @@ machine-readable method roleで分離する。
 
 - `tsh_huang_reference`
 - `tsh_track_b_practical`
+
+current M3のTrack B production outputは`method_role = tsh_track_b_practical`に固定する。
+`tsh_huang_reference`はpaper/reference underlying datasetのresultに限定する。
 
 primary TSM-vs-TSH comparison maskは日付範囲ではなく、各symbolの**M2 TSM-valid/formable
 holding months**とする。TSMとTSHは同一holding month、同一first-Open execution boundary、
