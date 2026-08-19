@@ -1,7 +1,25 @@
 # M3 — Multi-Symbol Common Rule
 
 ## Status
-`tsh-huang-v1` frozen / implementation ready.
+`tsh-huang-v1` frozen / implementation complete; Gate M3 PASS for current freeze v3.
+
+## Current implementation identity
+
+- `m3_spec_version = m3-multi-symbol-v1`
+- `tsh_spec_version = tsh-huang-v1`
+- `method_role = tsh_track_b_practical` for TSH outputs only
+- `freeze_version = 3`
+- `structural_spec_version = track-b-structural-v2`
+- `dataset_fingerprint_algorithm = track-b-daily-sha256-v1`
+- `dataset_fingerprint = 8dafe0355b65e382ab268485b858c2cc64070fabe3d2f4fd6d0a8db3b7292925`
+- `accounting_engine = shared_daily_open_to_open_v1`
+- `final_holdout_included = false`
+
+The production artifact is `results/m3/freeze_v3_20260819T080421229921Z/`.
+The current run executed 8 primary and 4 eligible secondary symbols. Gate M3 is
+an implementation/contract gate; performance is not used for its decision.
+There is no portfolio aggregation, and Final Holdout strategy performance is not
+included. The generated artifact is the authority for detailed results.
 
 ## 目的
 M0と同じdaily ruleを複数symbolへ独立適用し、single-symbol dependencyを確認する。
