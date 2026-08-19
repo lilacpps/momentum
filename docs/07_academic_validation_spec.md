@@ -864,7 +864,7 @@ freeze済みcontractとして扱います。TSHはTSMのexecuted PnLをhistorica
 
 原則:
 
-> historical sample meanがpositiveならLong、negativeならShort
+> historical sample meanがnon-negativeならLong、negativeならShort
 
 ## 8.1 Freeze gate
 
@@ -876,7 +876,36 @@ tsh_spec_version = tsh-huang-v1
 
 M3/M4/M7は同じcontractを再利用し、milestoneごとに再定義しません。
 
-### 8.2 Historical monthly return and expanding mean
+### 8.1.1 Paper-explicit definition
+
+以下がHuang paperから直接採用するTSHのeconomic/statistical definitionです。
+
+- asset `i`のformation month `M`までのhistorical sample mean（または同値な
+  累積simple returnの符号）をsignal sourceとする。
+- historical sample meanがnon-negativeならLong、negativeならShortとする。
+- TSH returnは、formation month `M`のsignalをholding month `M+1`のasset returnへ
+  適用する。
+
+このpaper-explicit definition自体には、Track Bのprepared Daily Close、UTC calendar
+month、first available Open、shared accounting engine、TSM comparison mask、または
+Track B dataset fingerprintは含まれません。
+
+### 8.1.2 Track B implementation convention
+
+以下はpaperのeconomic/statistical definitionとは別に、Track Bで再現可能な実験にする
+ためにfreezeするproject implementation conventionです。
+
+- prepared Exness Bid Daily datasetの最後のvalid Daily Closeを月次price authorityとする。
+- monthly signal formationにはClose-to-Close monthly returnを使う。
+- signalはfirst available Open of `M+1`で実行し、shared Daily Open-to-Open accountingへ渡す。
+- primary TSM-vs-TSH comparisonはM2 TSM-valid/formable holding-month maskで揃える。
+- matching Track B identityとして`freeze_version`、`structural_spec_version`、
+  `dataset_fingerprint`、`dataset_fingerprint_algorithm`を検証する。
+
+以下の8.2以降では、paper-explicit definitionを変更せず、このTrack B implementation
+conventionの具体的な月次系列、execution、comparison、metadataを定義します。
+
+### 8.2 Track B historical monthly return and expanding mean
 
 Huang et al.の式(17)およびTable 9に合わせ、TSHのhistorical meanは各symbolの
 最初のvalid monthly returnからformation month `M`までの月次returnを使います。
@@ -938,28 +967,44 @@ current freezeのprimary comparisonは実質`2017-01`〜`2023-12`ですが、日
 ではなくM2 TSM-valid maskを使用します。TSHのより早いsignalは必要な場合でもwarmup
 diagnosticに限定し、primary performance comparisonへ含めません。
 
-### 8.5 Track B scope and missing history
+### 8.5 Track B scope and missing-month semantics
 
 M3のTSH coreはsymbol-level、gross、unscaledです。portfolio aggregation、volatility
 scaling、cost、financing、performance-based symbol selectionはM3のscope外です。
 
-各symbolのhistory startは、そのsymbolで最初に利用可能なvalid monthly returnです。
-calendar monthの欠損をforward-fill、backward-fill、zero-fill、nearest-month substitution
-で補完しません。requested analysis range内のmissing monthはvalidなTSH observationを
-作れないためerror/除外として記録します。
+reference datasetにおけるinstrumentごとのhistory startは、そのinstrumentで最初に
+利用可能なvalid monthly returnです。instrumentごとにstartが異なることは許容し、
+available historyからexpanding meanを開始します。これはrequested analysis range内の
+calendar month欠損とは別の概念です。
+
+Track Bのrequested analysis range内で、calendar monthが丸ごとmissingとなる場合は
+**fail-fast error**とします。forward-fill、backward-fill、zero-fill、nearest-month
+substitutionは禁止し、missing monthのobservationを除外して処理を継続してはいけません。
+`error/除外`のような選択可能な扱いはありません。fail-fast errorにはsymbol、missing
+calendar month、requested analysis range、dataset identityを記録し、TSH resultを生成
+しません。
 
 primary 8 symbolsとsecondary 4 symbolsはresult roleを分離し、secondaryをprimary
 pooled resultへ混在させません。Final Holdout `2024-01`〜`2026-06`はM7までsealedです。
 
 ### 8.6 Required metadata
 
-TSH outputには少なくとも次を記録します。
+TSH outputには少なくとも次を記録します。`tsh_spec_version`はTSH methodologyそのもの
+のidentifierです。一方、`freeze_version`、`structural_spec_version`、
+`dataset_fingerprint`、`dataset_fingerprint_algorithm`はTSH methodologyのparameterでは
+なく、matching Track B dataset identityです。`accounting_engine`、`method_role`、
+`final_holdout_included`はcurrent experimentのproject execution/result metadataです。
+
+current M3 experimentでは、matching Track B identityを次の値で検証します。
 
 ```text
+# matching Track B dataset identity for current M3 experiment
 freeze_version = 3
 structural_spec_version = track-b-structural-v2
 dataset_fingerprint = M1A/M2と同一値
 dataset_fingerprint_algorithm = track-b-daily-sha256-v1
+
+# TSH methodology and project execution metadata
 tsh_spec_version = tsh-huang-v1
 method_role = tsh_huang_reference | tsh_track_b_practical
 accounting_engine = shared_daily_open_to_open_v1
