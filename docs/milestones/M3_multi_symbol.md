@@ -95,10 +95,12 @@ holding months**とする。TSMとTSHは同一holding month、同一first-Open e
 - outputs separable by symbol
 - no portfolio return yet
 
-## 人間が決める未決事項
-M1前にfreezeしたsymbol universeを使う。
-追加symbolを入れる場合は新しいexperimentとして扱う。
-TSH exact conventionはM3開始前にreferenceから固定する。
-TSH output metadataには`freeze_version`、`structural_spec_version`、`dataset_fingerprint`、
-`dataset_fingerprint_algorithm`、`tsh_spec_version`、`method_role`、
-`accounting_engine`、`final_holdout_included`を記録し、M1A/M2と同一dataset identityを要求する。
+## 固定済み事項 / experiment policy
+
+- M1前にfreezeしたsymbol universeを使う。
+- 追加symbolを入れる場合は新しいexperimentとして扱う。
+- TSH exact contractは`tsh-huang-v1`としてfreeze済み。
+- M3 Track B productionは`method_role = tsh_track_b_practical`に固定する。
+- TSH output metadataには`freeze_version`、`structural_spec_version`、`dataset_fingerprint`、
+  `dataset_fingerprint_algorithm`、`tsh_spec_version`、`method_role`、
+  `accounting_engine`、`final_holdout_included`を記録し、M1A/M2と同一dataset identityを要求する。
