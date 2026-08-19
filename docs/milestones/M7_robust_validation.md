@@ -31,7 +31,7 @@ Track A published sampleはreplication sampleとして分離。
 - cost stress
 - walk-forward
 - benchmarks
-- TSM vs TSH
+- TSM vs TSH on the M2 TSM-valid/formable holding-month mask
 - long / short leg attribution
 - weighting-scheme sensitivity
 - Track B final holdout one-shot evaluation
@@ -49,7 +49,10 @@ Track A published sampleはreplication sampleとして分離。
 - equal-weight comparison
 - volatility-weight comparison where appropriate
 
-reference TSHとcausal TSHが異なる場合は別series。
+TSHは`docs/07_academic_validation_spec.md`の`tsh_spec_version = tsh-huang-v1`を再利用する。
+paper/referenceとTrack B practical analogueはcausalityの対立ではなく、
+`method_role = tsh_huang_reference`と`method_role = tsh_track_b_practical`で分離する。
+TSHだけ早いholding monthをprimary TSM-vs-TSH comparisonへ追加しない。
 
 TSMがprofitableでもTSHを明確に上回らない場合、profitをpredictabilityの証拠とは結論しない。
 
@@ -93,8 +96,10 @@ post-publication Academic OOSがある場合は別ラベルで一度だけ評価
 - M4 equal-notional
 - M5 practical vol-scaled
 - M5 MOP-compatible reference-scaled
-- TSH reference comparator
-- TSH causal analogue（必要な場合）
+- TSH Huang reference comparator (`method_role = tsh_huang_reference`)
+- Track B practical comparator (`method_role = tsh_track_b_practical`)
+- shared `accounting_engine = shared_daily_open_to_open_v1`
+- `final_holdout_included = false` until the M7 one-shot evaluation
 
 ## 完了条件
 - Track B final holdout evaluated once

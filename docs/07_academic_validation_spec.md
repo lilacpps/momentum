@@ -857,7 +857,10 @@ max drawdown、reversal frequencyを含めます。
 
 # 8. TSH Challenge Contract — M3〜M7
 
-Huang et al.のTime-Series History comparatorを実装します。
+Huang et al.のTime-Series History comparatorを、M3〜M7で共通して利用する
+freeze済みcontractとして扱います。TSHはTSMのexecuted PnLをhistorical meanへ
+入力する方法ではなく、month-end Close-to-Close returnのhistorical meanでsignalを
+作るsymbol-level comparatorです。
 
 原則:
 
@@ -865,45 +868,105 @@ Huang et al.のTime-Series History comparatorを実装します。
 
 ## 8.1 Freeze gate
 
-M3開始前にpaperを再確認し、TSH exact historical-mean contractをfreezeします。M3/M4/M7は
-同じcontractを再利用し、milestoneごとに再定義しません。
-
-**Paper-explicit core:** TSHはassetのhistorical sample meanがnon-negativeならLong、negative
-ならShortとし、TSMのpast-12-month signalと比較します。原典はこのeconomic definitionを示します。
-
-**Implementation convention frozen before M3 (paper specificationとは別名義):**
-
-- `TSH_reference_replication` のsample startは、freezeしたreference datasetで各instrumentに
-  利用可能な最初のvalid monthly returnとする。`TSH_causal_expanding`も同じstartを使う。
-- historical meanはexpanding mean、時点`t`のsignalは`t-1`までのreturnだけで計算する。
-- signalはmonth-endに決定し、次月first available executionから次のrebalanceまで保持する。
-- historical mean `> 0` はLong、`< 0` はShort、`= 0` はFlatとする。
-- volatility scalingはMOP reference comparatorでは§3.2の`0.40/sigma[t-1]`、TSH単体の
-  unscaled comparatorではequal-notionalとし、両方を別seriesで出す。
-- rebalance cadenceはmonthly、available universeはその時点でsignal・return・volatilityが
-  全てvalidなinstrument、long/short legはposition signで分解する。
-
-この値はpaper本文が一意に指定した仕様ではなく、このprojectの再現可能な
-`implementation convention` です。paperのfull-sample/non-causal conventionを別途採用する場合は、
-必ず`TSH_reference_replication`に限定し、causal seriesと混ぜません。
-
-もしreference paperのreproduction conventionがfull-sample information等を含み、causal trading analogueと異なる場合は、
+M3開始前に、次のidentifierを含むTSH contractをfreezeします。
 
 ```text
-TSH_reference_replication
-TSH_causal_expanding
+tsh_spec_version = tsh-huang-v1
 ```
 
-を別seriesとして出力します。
+M3/M4/M7は同じcontractを再利用し、milestoneごとに再定義しません。
 
-causal trading strategyとして実行できる定義とpaperのreplication定義が異なる場合、必ず
+### 8.2 Historical monthly return and expanding mean
+
+Huang et al.の式(17)およびTable 9に合わせ、TSHのhistorical meanは各symbolの
+最初のvalid monthly returnからformation month `M`までの月次returnを使います。
+Track Bでは月次price authorityとreturnを次で固定します。
 
 ```text
-TSH_reference_replication
-TSH_causal_expanding
+P[M] = month M の最後の valid Daily Close
+r_monthly[M] = P[M] / P[M-1] - 1
+
+historical_mean[i,M]
+    = arithmetic mean of r_monthly[i,m]
+      from the first valid monthly return through M inclusive
 ```
 
-を別seriesにします。
+これは月次Close-to-Closeのsignal-formation returnです。executed strategy returnや
+Open-to-Open PnLをhistorical meanへ入力しません。`P[M] / P[start] - 1`のcompound
+cumulative returnもhistorical meanの代替にはしません。
+
+```text
+TSH_signal[i,M] = +1 if historical_mean[i,M] >= 0
+                  -1 if historical_mean[i,M] <  0
+```
+
+したがってTSH exact contractでは`historical_mean == 0`もLongであり、Flatではありません。
+M1/M2のTSMにおける`sign(0) = 0`のsemanticsは変更しません。
+
+formation month `M`のsignalはmonth-endに確定します。holding month `M+1`のreturnは
+signal生成に使用しないため、この定義はcausalです。
+
+### 8.3 Method roles
+
+paper/referenceとTrack B practical analogueはcausalityで対立するmethodではなく、
+underlying dataとresult roleで区別します。
+
+```text
+method_role = tsh_huang_reference
+method_role = tsh_track_b_practical
+```
+
+`TSH_reference_replication`および`TSH_causal_expanding`を、reference=non-causalと
+causal=practicalの対立を表すlabelとして使用しません。別のfull-sample/non-causal
+sensitivityを将来作る場合は、このcontract外の明示的な別methodとします。
+
+### 8.4 Execution and comparison mask
+
+TSHのstrategy returnはM2と同じshared Daily Open-to-Open accountingへ渡します。
+
+```text
+entry = first available Open of M+1
+exit  = first available Open of M+2
+```
+
+primary TSM-vs-TSH comparison maskは日付範囲でなく、各symbolについて
+**M2 TSMがvalid/formableなholding months**をauthorityとします。TSMとTSHは必ず、
+同一holding month、同一first-Open execution boundary、同一daily Open-to-Open
+return intervalで比較します。TSHだけ早いhistory期間をprimary comparisonへ追加しません。
+
+current freezeのprimary comparisonは実質`2017-01`〜`2023-12`ですが、日付のhard-code
+ではなくM2 TSM-valid maskを使用します。TSHのより早いsignalは必要な場合でもwarmup
+diagnosticに限定し、primary performance comparisonへ含めません。
+
+### 8.5 Track B scope and missing history
+
+M3のTSH coreはsymbol-level、gross、unscaledです。portfolio aggregation、volatility
+scaling、cost、financing、performance-based symbol selectionはM3のscope外です。
+
+各symbolのhistory startは、そのsymbolで最初に利用可能なvalid monthly returnです。
+calendar monthの欠損をforward-fill、backward-fill、zero-fill、nearest-month substitution
+で補完しません。requested analysis range内のmissing monthはvalidなTSH observationを
+作れないためerror/除外として記録します。
+
+primary 8 symbolsとsecondary 4 symbolsはresult roleを分離し、secondaryをprimary
+pooled resultへ混在させません。Final Holdout `2024-01`〜`2026-06`はM7までsealedです。
+
+### 8.6 Required metadata
+
+TSH outputには少なくとも次を記録します。
+
+```text
+freeze_version = 3
+structural_spec_version = track-b-structural-v2
+dataset_fingerprint = M1A/M2と同一値
+dataset_fingerprint_algorithm = track-b-daily-sha256-v1
+tsh_spec_version = tsh-huang-v1
+method_role = tsh_huang_reference | tsh_track_b_practical
+accounting_engine = shared_daily_open_to_open_v1
+final_holdout_included = false
+```
+
+dataset identityがM1A/M2と一致しない場合、TSH resultを生成しません。
 
 最低比較:
 

@@ -127,7 +127,9 @@ M0と同じdaily ruleを複数symbolへ独立適用。
 - symbol-specific tuningなし
 - TSH comparatorに必要なsymbol-level monthly historyを供給可能にする
 
-M3開始前にTSH exact historical-mean contractをfreezeし、M3/M4/M7で同一definitionを再利用する。
+M3開始前にTSH exact historical-mean contractを`tsh_spec_version = tsh-huang-v1`としてfreezeし、
+M3/M4/M7で同一definitionを再利用する。primary TSM-vs-TSH comparisonは各symbolのM2
+TSM-valid/formable holding-month maskをauthorityとし、TSHだけ早期holding monthを追加しない。
 
 ---
 

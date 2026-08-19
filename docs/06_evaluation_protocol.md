@@ -218,7 +218,9 @@ methodology、M1Aのcalendar-month/zero/missing/inference、M1B equation、Huang
 ## Gate M3/M4
 - symbol横断性
 - diversification
-- M3開始前にTSH exact historical-mean contractをfreeze済み
+- M3開始前に`tsh_spec_version = tsh-huang-v1`のTSH exact historical-mean contractをfreeze済み
+- primary TSM-vs-TSH comparisonはM2 TSM-valid/formable holding-month maskで整列済み
+- signal-formationのClose-to-Close monthly returnとexecuted Open-to-Open PnLを分離済み
 
 ## Gate M5
 - unscaledで何が残るか

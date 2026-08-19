@@ -50,7 +50,9 @@ M4のcommon-valid-start practical modeと混ぜない。
 - portfolio rebalance cadence
 - unavailable symbolを0 weightにするかexperiment exclusionにするか
 - FX common-currency exposureは診断のみか制約するか
-- TSH series convention
+- TSH series conventionは`docs/07_academic_validation_spec.md`の
+  `tsh_spec_version = tsh-huang-v1`を再利用する
+- TSM-vs-TSHは各symbolのM2 TSM-valid/formable holding-month maskで整列する
 
 ## 推奨default
 - experiment universe事前固定
@@ -66,6 +68,8 @@ M4のcommon-valid-start practical modeと混ぜない。
 - aligned dates only
 - deterministic universe handling
 - TSM and TSH aggregation use identical universe/weight contract within each comparison
+- TSM and TSH use identical first-Open execution boundaries and daily Open-to-Open intervals
+- TSH metadata preserves `method_role`, `accounting_engine`, and `final_holdout_included`
 
 ## 完了条件
 上記未決事項が文書化され、equal-notional portfolioがreproducibleであること。

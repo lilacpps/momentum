@@ -142,8 +142,12 @@ Practical Trackのtarget volatilityは別実験として扱います。
 
 をchallenge suiteとして扱います。
 
-TSHのhistorical-mean definitionは `references/7.Time-series momentum_ Is it there_.pdf` の式・sample conventionを実装前に固定し、
-論文仕様とcausal expanding-history analogueが異なる場合は**別出力**にします。
+TSHのhistorical-mean definitionは `references/7.Time-series momentum_ Is it there_.pdf` の式・sample conventionに合わせ、
+`docs/07_academic_validation_spec.md`で`tsh_spec_version = tsh-huang-v1`としてM3開始前に固定します。
+paper/referenceとTrack B practical analogueは、causalityの対立ではなく
+`method_role = tsh_huang_reference` / `tsh_track_b_practical`で区別します。
+TSHのprimary TSM-vs-TSH comparisonは、各symbolのM2 TSM-valid/formable holding-month mask、
+同一first-Open boundary、同一daily Open-to-Open intervalに限定します。
 Huang bootstrapはM1C開始前にpaperからcontractをfreezeし、その後に実装します。
 
 ### M1 workstream status

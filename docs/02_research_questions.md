@@ -175,6 +175,10 @@ naive pooled t-statだけを結論にしない。
 M3開始前にHuang et al.のTime-Series History (TSH) exact historical-mean contractをfreezeし、
 M3〜M7で同じdefinitionを再利用する。
 
+TSHのprimary comparison maskは日付を直接指定せず、各symbolのM2 TSM-valid/formable
+holding monthsをauthorityとする。TSMとTSHは同一holding month、同一first-Open execution
+boundary、同一daily Open-to-Open return intervalで比較し、TSHだけ早期期間を追加しない。
+
 最低限、
 
 - TSM return
@@ -186,5 +190,7 @@ M3〜M7で同じdefinitionを再利用する。
 
 を見る。
 
-TSHのhistorical-mean windowはreference paperのexact definitionを固定してから実装する。
-論文仕様とcausal expanding-history analogueが異なる場合は別出力にする。
+TSHのhistorical meanはmonth-end Close-to-Close monthly returnのformation month inclusive
+arithmetic expanding meanとし、executed Open-to-Open strategy PnLとは分離する。
+contract identifierは`tsh_spec_version = tsh-huang-v1`とし、method roleは
+`tsh_huang_reference` / `tsh_track_b_practical`で固定する。

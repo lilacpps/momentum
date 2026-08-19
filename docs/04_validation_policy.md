@@ -295,7 +295,8 @@ M2はunscaledなので、MOP representative factorのcomplete strategy comparato
 common ruleを複数symbolへ適用。
 単一市場依存を確認。
 
-M3開始前にTSH exact historical-mean contractを`docs/07_academic_validation_spec.md`でfreezeし、
+M3開始前にTSH exact historical-mean contractを`docs/07_academic_validation_spec.md`で
+`tsh_spec_version = tsh-huang-v1`としてfreezeし、
 M3/M4/M7で同一definitionを再利用します。
 
 ## M4 — Portfolio
